@@ -1,7 +1,11 @@
 using UnityEngine;
+using System.Collections; 
+using UnityEngine.SceneManagement; 
 
 public class Player : MonoBehaviour
 {
+    public int health = 100;
+
     public float moveSpeed = 5f;
     public float jumpforce = 10f;
     public Transform GroundChek;
@@ -20,11 +24,14 @@ public class Player : MonoBehaviour
     public int extraJumpesValue = 1;
     private int extraJumps;
 
+    private SpriteRenderer spriteRender; // Виправлено: SpriteRenderer замість SpriteRender
+
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
         extraJumps = extraJumpesValue;
+        spriteRender = GetComponent<SpriteRenderer>(); // Виправлено: SpriteRenderer
     }
 
     void Update()
@@ -121,4 +128,31 @@ public class Player : MonoBehaviour
         animator.Play(newAnimation);
         currentAnimation = newAnimation;
     }
+    
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (collision.gameObject.CompareTag("Damage"))
+        {
+            health -= 25;
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, 1.5f * jumpforce);
+            StartCoroutine(BlinkRed());
+            if (health <= 0)
+            {
+                Die();
+            }
+        }
+    }
+
+    private IEnumerator BlinkRed()
+    {
+        spriteRender.color = Color.red;
+        yield return new WaitForSeconds(0.1f);
+        spriteRender.color = Color.white;
+    }
+
+    private void Die()
+    {
+        SceneManager.LoadScene("GameScene");
+    }
+    
 }
