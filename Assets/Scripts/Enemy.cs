@@ -43,16 +43,22 @@ public class Enemy : MonoBehaviour
 
         Transform targetPoint = waypoints[currentPointIndex];
 
-        if (Vector2.Distance(transform.position, targetPoint.position) < 0.25f)
+        // Перевіряємо відстань суто по осі X
+        float distanceX = Mathf.Abs(transform.position.x - targetPoint.position.x);
+
+        if (distanceX < 0.2f)
         {
             currentPointIndex++;
             if (currentPointIndex >= waypoints.Length)
             {
                 currentPointIndex = 0;
             }
+            targetPoint = waypoints[currentPointIndex];
         }
 
-        transform.position = Vector2.MoveTowards(transform.position, targetPoint.position, patrolSpeed * Time.deltaTime);
+        Vector2 targetPosition = new Vector2(targetPoint.position.x, transform.position.y);
+        transform.position = Vector2.MoveTowards(transform.position, targetPosition, patrolSpeed * Time.deltaTime);
+
         FlipSprite(targetPoint.position.x);
     }
 
