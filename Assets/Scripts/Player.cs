@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections; 
 using UnityEngine.SceneManagement; 
+using UnityEngine.UI;
 
 public class Player : MonoBehaviour
 {
@@ -24,14 +25,16 @@ public class Player : MonoBehaviour
     public int extraJumpesValue = 1;
     private int extraJumps;
 
-    private SpriteRenderer spriteRender; // Виправлено: SpriteRenderer замість SpriteRender
+    public Image healthImage;
+
+    private SpriteRenderer spriteRender; 
 
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
         extraJumps = extraJumpesValue;
-        spriteRender = GetComponent<SpriteRenderer>(); // Виправлено: SpriteRenderer
+        spriteRender = GetComponent<SpriteRenderer>(); 
     }
 
     void Update()
@@ -68,6 +71,11 @@ public class Player : MonoBehaviour
             Jump();
             jumpBufferCounter = 0f;
         }
+
+        if (healthImage != null)
+    {
+        healthImage.fillAmount = health / 100f;
+    }
 
         SetAnimation(moveInput);
     }
