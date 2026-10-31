@@ -41,7 +41,9 @@ public class Player : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
         extraJumps = extraJumpesValue;
-        spriteRender = GetComponent<SpriteRenderer>(); 
+        spriteRender = GetComponent<SpriteRenderer>();
+
+        IntroCutscene.EnsureCutsceneExists();
     }
 
     void Update()
@@ -176,6 +178,11 @@ public class Player : MonoBehaviour
 
     private void Shoot()
     {
+        if (arrowPrefab == null)
+        {
+            return;
+        }
+
         if (Time.time < nextArrowTime)
         {
             return;
@@ -183,7 +190,10 @@ public class Player : MonoBehaviour
         
         nextArrowTime = Time.time + arrowCooldown;
         
-        GameObject arrow = Instantiate(arrowPrefab, arrowSpawnPoint.position, Quaternion.identity);
+        Vector3 spawnPos = arrowSpawnPoint != null ? arrowSpawnPoint.position : transform.position;
+        GameObject arrow = Instantiate(arrowPrefab, spawnPos, Quaternion.identity);
+
+        float shootDir = transform.localScale.x > 0 ? 1f : -1f;
 
         if (transform.localScale.x > 0)
         {
@@ -192,6 +202,13 @@ public class Player : MonoBehaviour
         else
         {
             arrow.transform.rotation = Quaternion.identity;
+        }
+
+        Rigidbody2D arrowRb = arrow.GetComponent<Rigidbody2D>();
+        if (arrowRb != null)
+        {
+            float arrowSpeed = 10f;
+            arrowRb.linearVelocity = new Vector2(shootDir * arrowSpeed, 0f);
         }
     }
     
