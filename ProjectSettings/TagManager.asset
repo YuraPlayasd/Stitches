@@ -45,11 +45,11 @@ TagManager:
   - name: BackGround
     uniqueID: 4209052401
     locked: 0
-  - name: Player
-    uniqueID: 931206793
-    locked: 0
   - name: TileMap
     uniqueID: 4187219063
+    locked: 0
+  - name: Player
+    uniqueID: 931206793
     locked: 0
   m_RenderingLayers:
   - Default
