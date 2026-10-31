@@ -245,6 +245,7 @@ MonoBehaviour:
   audioSource: {fileID: 0}
   pickupSound: {fileID: 0}
   isCollected: 0
+  interactionDistance: 2.5
 --- !u!58 &33443947
 CircleCollider2D:
   m_ObjectHideFlags: 0
@@ -911,7 +912,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: '...'
+  m_text: ...
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -1352,7 +1353,7 @@ Transform:
   m_GameObject: {fileID: 519420028}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 151.5, y: -3, z: -10}
+  m_LocalPosition: {x: 68.5, y: 2.2, z: -10}
   m_LocalScale: {x: 4, y: 4, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1607,7 +1608,7 @@ MonoBehaviour:
     version: 2
     RefIds:
     - rid: -2
-      type: {class: '', ns: '', asm: ''}
+      type: {class: , ns: , asm: }
     - rid: 2973289015152214218
       type: {class: Light2DProviderSources, ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.2D.Runtime}
       data:
@@ -1717,6 +1718,7 @@ MonoBehaviour:
   audioSource: {fileID: 0}
   pickupSound: {fileID: 0}
   isCollected: 0
+  interactionDistance: 2.5
 --- !u!58 &774194910
 CircleCollider2D:
   m_ObjectHideFlags: 0
@@ -5786,6 +5788,7 @@ MonoBehaviour:
   audioSource: {fileID: 0}
   pickupSound: {fileID: 0}
   isCollected: 0
+  interactionDistance: 2.5
 --- !u!58 &868585852
 CircleCollider2D:
   m_ObjectHideFlags: 0
@@ -6328,7 +6331,7 @@ SpriteRenderer:
   m_Size: {x: 1, y: 1}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
 --- !u!4 &1103232348
@@ -6447,7 +6450,7 @@ Transform:
   m_GameObject: {fileID: 1185098026}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 151.5, y: -3, z: -10}
+  m_LocalPosition: {x: 68.5, y: 2.2, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -6644,7 +6647,6 @@ MonoBehaviour:
   itemType: 0
   itemName: "\u0413\u043E\u043B\u043E\u0432\u0430 \u0424\u0440\u0430\u043D\u043A\u0430"
   amount: 1
-  interactionDistance: 2.5
   requireKeyPress: 0
   pickupKey: 101
   promptUI: {fileID: 0}
@@ -6662,6 +6664,7 @@ MonoBehaviour:
   audioSource: {fileID: 0}
   pickupSound: {fileID: 0}
   isCollected: 0
+  interactionDistance: 2.5
 --- !u!58 &1410283623
 CircleCollider2D:
   m_ObjectHideFlags: 0
@@ -7246,7 +7249,7 @@ Transform:
   m_GameObject: {fileID: 1765551338}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 151.5, y: -3, z: 0}
+  m_LocalPosition: {x: 68.5, y: 2.2, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -7721,7 +7724,7 @@ Transform:
   m_GameObject: {fileID: 1874025608}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 151.5, y: -3, z: -10}
+  m_LocalPosition: {x: 68.5, y: 2.2, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
