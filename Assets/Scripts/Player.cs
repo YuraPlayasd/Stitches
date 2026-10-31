@@ -171,7 +171,7 @@ public class Player : MonoBehaviour
         spriteRender.color = Color.white;
     }
 
-    private void Die()
+    public void Die()
     {
         SceneManager.LoadScene("GameScene");
     }
