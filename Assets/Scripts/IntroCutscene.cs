@@ -124,9 +124,9 @@ public class IntroCutscene : MonoBehaviour
 
     void Update()
     {
-        if (hasStarted && !isCutsceneFinished)
+        if (!isCutsceneFinished)
         {
-            if (Input.GetKeyDown(skipKey) || Input.GetKeyDown(alternateSkipKey))
+            if (Input.GetKeyDown(skipKey) || Input.GetKeyDown(alternateSkipKey) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
             {
                 SkipCutscene();
             }
@@ -416,15 +416,18 @@ public class IntroCutscene : MonoBehaviour
             }
 
             // Skip Cutscene Button
-            Transform skipT = canvas.transform.Find("SkipButton");
-            GameObject skipObj = null;
-            if (skipT != null)
+            if (skipButton == null)
             {
-                skipObj = skipT.gameObject;
+                Transform skipT = canvas.transform.Find("SkipButton");
+                if (skipT != null)
+                {
+                    skipButton = skipT.GetComponent<Button>();
+                }
             }
-            else
+
+            if (skipButton == null)
             {
-                skipObj = new GameObject("SkipButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+                GameObject skipObj = new GameObject("SkipButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
                 skipObj.transform.SetParent(canvas.transform, false);
 
                 RectTransform srt = skipObj.GetComponent<RectTransform>();
@@ -432,7 +435,7 @@ public class IntroCutscene : MonoBehaviour
                 srt.anchorMax = new Vector2(1f, 1f);
                 srt.pivot = new Vector2(1f, 1f);
                 srt.anchoredPosition = new Vector2(-25f, -25f);
-                srt.sizeDelta = new Vector2(210f, 48f);
+                srt.sizeDelta = new Vector2(230f, 48f);
 
                 Image sImg = skipObj.GetComponent<Image>();
                 sImg.color = new Color(0.10f, 0.12f, 0.20f, 0.88f);
@@ -440,8 +443,8 @@ public class IntroCutscene : MonoBehaviour
                 Button btn = skipObj.GetComponent<Button>();
                 ColorBlock cb = btn.colors;
                 cb.normalColor = Color.white;
-                cb.highlightedColor = new Color(1.2f, 1.2f, 1.2f, 1f);
-                cb.pressedColor = new Color(0.7f, 0.85f, 1f, 1f);
+                cb.highlightedColor = new Color(0.35f, 0.85f, 1f, 1f);
+                cb.pressedColor = new Color(0.2f, 0.6f, 0.9f, 1f);
                 btn.colors = cb;
 
                 TextMeshProUGUI skipTxt = CreateTMP(skipObj.transform, "SkipText", "Пропустити ▸▸ [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
@@ -454,14 +457,14 @@ public class IntroCutscene : MonoBehaviour
                     txtRt.offsetMax = Vector2.zero;
                 }
                 skipTxt.alignment = TextAlignmentOptions.Center;
+                skipButton = btn;
             }
 
-            if (skipObj != null)
+            if (skipButton != null)
             {
-                skipButton = skipObj.GetComponent<Button>();
                 skipButton.onClick.RemoveAllListeners();
                 skipButton.onClick.AddListener(SkipCutscene);
-                skipButton.gameObject.SetActive(false);
+                skipButton.gameObject.SetActive(playOnStart && !isCutsceneFinished);
             }
 
             dialoguePanel.SetActive(false);
@@ -758,7 +761,8 @@ public class IntroCutscene : MonoBehaviour
 
     public void SkipCutscene()
     {
-        if (!hasStarted || isCutsceneFinished) return;
+        if (isCutsceneFinished) return;
+        hasStarted = true;
         isCutsceneFinished = true;
 
         if (cutsceneCoroutine != null)
@@ -782,12 +786,7 @@ public class IntroCutscene : MonoBehaviour
         // Cancel screen flash / lightning
         if (lightningStrike != null)
         {
-            lightningStrike.StopAllCoroutines();
-            if (lightningStrike.flashScreenImage != null)
-            {
-                lightningStrike.flashScreenImage.color = new Color(1f, 1f, 1f, 0f);
-                lightningStrike.flashScreenImage.gameObject.SetActive(false);
-            }
+            lightningStrike.CancelStrike();
         }
 
         // Stop cutscene audio
@@ -851,10 +850,14 @@ public class IntroCutscene : MonoBehaviour
             }
         }
 
-        // Restore Doctor (Player) controls
+        // Restore Doctor (Player) controls and position
         if (doctorPlayer != null)
         {
             doctorPlayer.SetActive(true);
+            if (deskRenderer != null)
+            {
+                doctorPlayer.transform.position = deskRenderer.transform.position + doctorOffset;
+            }
             Player playerScript = doctorPlayer.GetComponent<Player>();
             if (playerScript != null) playerScript.enabled = true;
             Rigidbody2D rb = doctorPlayer.GetComponent<Rigidbody2D>();
@@ -868,7 +871,7 @@ public class IntroCutscene : MonoBehaviour
         }
 
         // Smoothly zoom camera back out
-        StartCoroutine(ZoomCameraRoutine(cutsceneZoom, normalZoom, 0.5f));
+        StartCoroutine(ZoomCameraRoutine(cutsceneZoom, normalZoom, 0.4f));
     }
 
     private void SetCameraZoom(float zoom)

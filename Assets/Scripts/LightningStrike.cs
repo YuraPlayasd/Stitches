@@ -136,6 +136,29 @@ public class LightningStrike : MonoBehaviour
         onComplete?.Invoke();
     }
 
+    public void CancelStrike()
+    {
+        StopAllCoroutines();
+        flashAlpha = 0f;
+        if (flashScreenImage != null)
+        {
+            flashScreenImage.color = new Color(1f, 1f, 1f, 0f);
+            flashScreenImage.gameObject.SetActive(false);
+        }
+        if (meshRenderer != null)
+        {
+            meshRenderer.enabled = false;
+        }
+        if (lightningMesh != null)
+        {
+            lightningMesh.Clear();
+        }
+        if (audioSource != null && audioSource.isPlaying)
+        {
+            audioSource.Stop();
+        }
+    }
+
     private void PlayThunder()
     {
         if (thunderSound == null)
