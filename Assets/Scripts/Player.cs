@@ -47,7 +47,7 @@ public class Player : MonoBehaviour
     void Update()
     {
         float moveInput = Input.GetAxis("Horizontal");
-        if (Input.GetKeyDown(KeyCode.E))
+        if (Input.GetKeyDown(KeyCode.F))
         {
             Shoot();
         }
