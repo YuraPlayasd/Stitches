@@ -359,6 +359,51 @@ public static class CutsceneBuilder
             headCollectible.promptText = promptUIObj.GetComponent<TextMeshProUGUI>();
         }
 
+        // Skip Cutscene Button
+        Transform skipT = canvas.transform.Find("SkipButton");
+        GameObject skipObj = null;
+        if (skipT != null)
+        {
+            skipObj = skipT.gameObject;
+        }
+        else
+        {
+            skipObj = new GameObject("SkipButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            skipObj.transform.SetParent(canvas.transform, false);
+            Undo.RegisterCreatedObjectUndo(skipObj, "Create SkipButton");
+        }
+
+        RectTransform srt = skipObj.GetComponent<RectTransform>();
+        if (srt != null)
+        {
+            srt.anchorMin = new Vector2(1f, 1f);
+            srt.anchorMax = new Vector2(1f, 1f);
+            srt.pivot = new Vector2(1f, 1f);
+            srt.anchoredPosition = new Vector2(-25f, -25f);
+            srt.sizeDelta = new Vector2(210f, 48f);
+        }
+
+        Image sImg = skipObj.GetComponent<Image>();
+        if (sImg == null) sImg = skipObj.AddComponent<Image>();
+        sImg.color = new Color(0.10f, 0.12f, 0.20f, 0.88f);
+
+        Button sBtn = skipObj.GetComponent<Button>();
+        if (sBtn == null) sBtn = skipObj.AddComponent<Button>();
+
+        TextMeshProUGUI skipTxt = CreateOrGetTMP(skipObj.transform, "SkipText", "Пропустити ▸▸ [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
+        RectTransform txtRt = skipTxt.transform as RectTransform;
+        if (txtRt != null)
+        {
+            txtRt.anchorMin = Vector2.zero;
+            txtRt.anchorMax = Vector2.one;
+            txtRt.offsetMin = Vector2.zero;
+            txtRt.offsetMax = Vector2.zero;
+        }
+        skipTxt.alignment = TextAlignmentOptions.Center;
+
+        cutscene.skipButton = sBtn;
+        skipObj.SetActive(false);
+
         dialogueObj.SetActive(false);
 
         // 10. Gameplay UI

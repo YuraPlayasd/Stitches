@@ -93,10 +93,19 @@ public class IntroCutscene : MonoBehaviour
     public AudioClip screamSound;
     public AudioClip voiceBlipSound;
 
+    [Header("Skip Cutscene Settings")]
+    public Button skipButton;
+    public KeyCode skipKey = KeyCode.Escape;
+    public KeyCode alternateSkipKey = KeyCode.Tab;
+
     [HideInInspector]
     public bool hasStarted = false;
+    [HideInInspector]
+    public bool isCutsceneFinished = false;
 
     private bool skipTyping = false;
+    private Coroutine cutsceneCoroutine;
+    private Coroutine mouthCoroutine;
     private Coroutine blinkCoroutine;
 
     void Awake()
@@ -110,6 +119,17 @@ public class IntroCutscene : MonoBehaviour
         if (playOnStart && !hasStarted)
         {
             StartCutscene();
+        }
+    }
+
+    void Update()
+    {
+        if (hasStarted && !isCutsceneFinished)
+        {
+            if (Input.GetKeyDown(skipKey) || Input.GetKeyDown(alternateSkipKey))
+            {
+                SkipCutscene();
+            }
         }
     }
 
@@ -395,6 +415,55 @@ public class IntroCutscene : MonoBehaviour
                 }
             }
 
+            // Skip Cutscene Button
+            Transform skipT = canvas.transform.Find("SkipButton");
+            GameObject skipObj = null;
+            if (skipT != null)
+            {
+                skipObj = skipT.gameObject;
+            }
+            else
+            {
+                skipObj = new GameObject("SkipButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+                skipObj.transform.SetParent(canvas.transform, false);
+
+                RectTransform srt = skipObj.GetComponent<RectTransform>();
+                srt.anchorMin = new Vector2(1f, 1f);
+                srt.anchorMax = new Vector2(1f, 1f);
+                srt.pivot = new Vector2(1f, 1f);
+                srt.anchoredPosition = new Vector2(-25f, -25f);
+                srt.sizeDelta = new Vector2(210f, 48f);
+
+                Image sImg = skipObj.GetComponent<Image>();
+                sImg.color = new Color(0.10f, 0.12f, 0.20f, 0.88f);
+
+                Button btn = skipObj.GetComponent<Button>();
+                ColorBlock cb = btn.colors;
+                cb.normalColor = Color.white;
+                cb.highlightedColor = new Color(1.2f, 1.2f, 1.2f, 1f);
+                cb.pressedColor = new Color(0.7f, 0.85f, 1f, 1f);
+                btn.colors = cb;
+
+                TextMeshProUGUI skipTxt = CreateTMP(skipObj.transform, "SkipText", "Пропустити ▸▸ [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
+                RectTransform txtRt = skipTxt.transform as RectTransform;
+                if (txtRt != null)
+                {
+                    txtRt.anchorMin = Vector2.zero;
+                    txtRt.anchorMax = Vector2.one;
+                    txtRt.offsetMin = Vector2.zero;
+                    txtRt.offsetMax = Vector2.zero;
+                }
+                skipTxt.alignment = TextAlignmentOptions.Center;
+            }
+
+            if (skipObj != null)
+            {
+                skipButton = skipObj.GetComponent<Button>();
+                skipButton.onClick.RemoveAllListeners();
+                skipButton.onClick.AddListener(SkipCutscene);
+                skipButton.gameObject.SetActive(false);
+            }
+
             dialoguePanel.SetActive(false);
         }
 
@@ -462,12 +531,15 @@ public class IntroCutscene : MonoBehaviour
     {
         if (hasStarted) return;
         hasStarted = true;
-        StartCoroutine(CutsceneRoutine());
+        isCutsceneFinished = false;
+        if (skipButton != null) skipButton.gameObject.SetActive(true);
+        cutsceneCoroutine = StartCoroutine(CutsceneRoutine());
     }
 
     private IEnumerator CutsceneRoutine()
     {
         // 1. Initial State:
+        if (skipButton != null) skipButton.gameObject.SetActive(true);
         // Set camera zoom in for the cutscene
         SetCameraZoom(cutsceneZoom);
 
@@ -593,7 +665,7 @@ public class IntroCutscene : MonoBehaviour
         if (dialoguePanel != null) dialoguePanel.SetActive(true);
         if (speakerNameText != null) speakerNameText.text = headSpeakerName;
 
-        yield return StartCoroutine(TypeTextWithMouth(monologueText));
+        yield return mouthCoroutine = StartCoroutine(TypeTextWithMouth(monologueText));
 
         // Delay to prevent accidental key skip from closing dialogue instantly
         yield return new WaitForSeconds(delayBeforeContinuePrompt);
@@ -677,8 +749,126 @@ public class IntroCutscene : MonoBehaviour
             gameplayUI.SetActive(true);
         }
 
+        isCutsceneFinished = true;
+        if (skipButton != null) skipButton.gameObject.SetActive(false);
+
         // Smoothly zoom camera back out to normal gameplay view
         StartCoroutine(ZoomCameraRoutine(cutsceneZoom, normalZoom, zoomOutDuration));
+    }
+
+    public void SkipCutscene()
+    {
+        if (!hasStarted || isCutsceneFinished) return;
+        isCutsceneFinished = true;
+
+        if (cutsceneCoroutine != null)
+        {
+            StopCoroutine(cutsceneCoroutine);
+            cutsceneCoroutine = null;
+        }
+
+        if (mouthCoroutine != null)
+        {
+            StopCoroutine(mouthCoroutine);
+            mouthCoroutine = null;
+        }
+
+        if (blinkCoroutine != null)
+        {
+            StopCoroutine(blinkCoroutine);
+            blinkCoroutine = null;
+        }
+
+        // Cancel screen flash / lightning
+        if (lightningStrike != null)
+        {
+            lightningStrike.StopAllCoroutines();
+            if (lightningStrike.flashScreenImage != null)
+            {
+                lightningStrike.flashScreenImage.color = new Color(1f, 1f, 1f, 0f);
+                lightningStrike.flashScreenImage.gameObject.SetActive(false);
+            }
+        }
+
+        // Stop cutscene audio
+        if (audioSource != null && audioSource.isPlaying)
+        {
+            audioSource.Stop();
+        }
+
+        // Hide operating table and smoke
+        if (deskRenderer != null)
+        {
+            deskRenderer.gameObject.SetActive(false);
+        }
+        if (smokeRenderer != null)
+        {
+            smokeRenderer.gameObject.SetActive(false);
+        }
+
+        // Hide dialogue UI and skip button
+        if (dialoguePanel != null) dialoguePanel.SetActive(false);
+        SetPromptVisible(false);
+        if (skipButton != null) skipButton.gameObject.SetActive(false);
+
+        // Position Frank's head on the ground as an interactive Collectible
+        Vector3 hitTarget = deskRenderer != null ? deskRenderer.transform.position + new Vector3(0, 0.4f, 0) : transform.position;
+        Vector3 headGroundPos = deskRenderer != null ? new Vector3(deskRenderer.transform.position.x, 0.85f, 0f) : new Vector3(hitTarget.x, 0.85f, 0f);
+
+        if (headRenderer != null)
+        {
+            headRenderer.transform.position = headGroundPos;
+            headRenderer.transform.localScale = headScale;
+            if (headNormalSprite != null) headRenderer.sprite = headNormalSprite;
+            headRenderer.gameObject.SetActive(true);
+
+            CircleCollider2D headCol = headRenderer.GetComponent<CircleCollider2D>();
+            if (headCol == null) headCol = headRenderer.gameObject.AddComponent<CircleCollider2D>();
+            headCol.isTrigger = true;
+            headCol.radius = 2.5f;
+
+            CollectibleItem collectible = headRenderer.GetComponent<CollectibleItem>();
+            if (collectible == null) collectible = headRenderer.gameObject.AddComponent<CollectibleItem>();
+            collectible.enabled = true;
+            collectible.interactionDistance = 2.5f;
+            collectible.itemType = CollectibleType.FrankHead;
+            collectible.itemName = "Голова Франка";
+            collectible.requireKeyPress = false;
+            collectible.pickupKey = KeyCode.E;
+            collectible.dialoguePanel = dialoguePanel;
+            collectible.dialogueText = dialogueText;
+            collectible.speakerNameText = speakerNameText;
+            collectible.speakerName = headSpeakerName;
+            collectible.pickupSpeech = "Обережно, Лікарю! Не впустіть мене! А тепер ходімо досліджувати замок і знайдемо всі мої частини тіла!";
+            collectible.enableBobbing = true;
+            collectible.SetInitialPosition(headGroundPos);
+
+            GameObject doorTextObj = GameObject.Find("DoorText");
+            if (doorTextObj != null)
+            {
+                collectible.promptUI = doorTextObj;
+                collectible.promptText = doorTextObj.GetComponent<TextMeshProUGUI>();
+            }
+        }
+
+        // Restore Doctor (Player) controls
+        if (doctorPlayer != null)
+        {
+            doctorPlayer.SetActive(true);
+            Player playerScript = doctorPlayer.GetComponent<Player>();
+            if (playerScript != null) playerScript.enabled = true;
+            Rigidbody2D rb = doctorPlayer.GetComponent<Rigidbody2D>();
+            if (rb != null) rb.linearVelocity = Vector2.zero;
+        }
+
+        // Enable gameplay UI (HealthBar)
+        if (gameplayUI != null)
+        {
+            gameplayUI.SetActive(true);
+        }
+
+        // Smoothly zoom camera back out
+        StartCoroutine(ZoomCameraRoutine(cutsceneZoom, normalZoom, 0.5f));
     }
 
     private void SetCameraZoom(float zoom)
