@@ -4,23 +4,23 @@ using UnityEngine.SceneManagement;
 public class Door : MonoBehaviour
 {
     [Header("Scene Transition Settings")]
-    [Tooltip("Назва сцени наступного рівня, на яку треба перейти (наприклад, Level2)")]
+    [Tooltip("Name of the scene to load upon entering the door (e.g. Level2 or LevelHub)")]
     public string nextSceneName = "Level2";
 
-    [Tooltip("Якщо увімкнено, завантажує сцену за індексом у Build Settings")]
+    [Tooltip("If enabled, loads scene by build index instead of name")]
     public bool loadByIndex = false;
     public int nextSceneIndex = 1;
 
     [Header("Interaction Settings")]
-    [Tooltip("Клавіша для входу в двері")]
+    [Tooltip("Key to enter the door")]
     public KeyCode interactKey = KeyCode.E;
 
     [Header("UI Prompt")]
-    [Tooltip("Об'єкт тексту або підказки на екрані ('Press E - to Enter Level')")]
+    [Tooltip("UI prompt object on screen ('Press E - to Enter Level')")]
     public GameObject promptUI;
 
     [Header("Optional Door Visuals")]
-    [Tooltip("Необов'язковий спрайт відкритих дверей")]
+    [Tooltip("Optional sprite for an opened door")]
     public Sprite openDoorSprite;
 
     private bool isPlayerNear = false;
@@ -30,7 +30,7 @@ public class Door : MonoBehaviour
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
 
-        // Ховаємо підказку на старті
+        // Hide prompt at start
         if (promptUI != null)
         {
             promptUI.SetActive(false);

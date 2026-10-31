@@ -27,19 +27,32 @@ public class Player : MonoBehaviour
 
     public Image healthImage;
 
-    private SpriteRenderer spriteRender; 
+    private SpriteRenderer spriteRender;
+
+    [Header("Shooting")] 
+    public GameObject arrowPrefab;
+    public Transform arrowSpawnPoint;
+    public float arrowCooldown = 0.5f;
+
+    private float nextArrowTime;
 
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
         extraJumps = extraJumpesValue;
-        spriteRender = GetComponent<SpriteRenderer>(); 
+        spriteRender = GetComponent<SpriteRenderer>();
+
+        IntroCutscene.EnsureCutsceneExists();
     }
 
     void Update()
     {
         float moveInput = Input.GetAxis("Horizontal");
+        if (Input.GetKeyDown(KeyCode.F))
+        {
+            Shoot();
+        }
         rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
 
         if (isGrounded)
@@ -72,7 +85,7 @@ public class Player : MonoBehaviour
             jumpBufferCounter = 0f;
         }
 
-        if (healthImage != null)
+        if (healthImage is not null)
     {
         healthImage.fillAmount = health / 100f;
     }
@@ -161,6 +174,42 @@ public class Player : MonoBehaviour
     private void Die()
     {
         SceneManager.LoadScene("GameScene");
+    }
+
+    private void Shoot()
+    {
+        if (arrowPrefab == null)
+        {
+            return;
+        }
+
+        if (Time.time < nextArrowTime)
+        {
+            return;
+        }
+        
+        nextArrowTime = Time.time + arrowCooldown;
+        
+        Vector3 spawnPos = arrowSpawnPoint != null ? arrowSpawnPoint.position : transform.position;
+        GameObject arrow = Instantiate(arrowPrefab, spawnPos, Quaternion.identity);
+
+        float shootDir = transform.localScale.x > 0 ? 1f : -1f;
+
+        if (transform.localScale.x > 0)
+        {
+            arrow.transform.rotation = Quaternion.Euler(0, 0, 180);
+        }
+        else
+        {
+            arrow.transform.rotation = Quaternion.identity;
+        }
+
+        Rigidbody2D arrowRb = arrow.GetComponent<Rigidbody2D>();
+        if (arrowRb != null)
+        {
+            float arrowSpeed = 10f;
+            arrowRb.linearVelocity = new Vector2(shootDir * arrowSpeed, 0f);
+        }
     }
     
 }
