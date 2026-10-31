@@ -2,7 +2,7 @@
 * text=auto
 
 # Exclude third-party assets and Unity shaders from GitHub language statistics
-Assets/TextMesh\ Pro/** linguist-vendored
+"Assets/TextMesh Pro/**" linguist-vendored
 *.shader linguist-detectable=false
 *.hlsl linguist-detectable=false
 *.cginc linguist-detectable=false
