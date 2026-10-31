@@ -8363,7 +8363,7 @@ MonoBehaviour:
     m_Bits: 64
   jumpBufferTime: 0.5
   extraJumpesValue: 1
-  healthImage: {fileID: 0}
+  healthImage: {fileID: 892101919}
   arrowPrefab: {fileID: 889381046092067042, guid: 52e79a9e120ff4d4190a07f8912df25b, type: 3}
   arrowSpawnPoint: {fileID: 1169196488}
   arrowCooldown: 0.5

@@ -254,7 +254,7 @@ public class CollectibleItem : MonoBehaviour
         // Apply health or resource effect
         if (nearbyPlayer != null && itemType == CollectibleType.Health)
         {
-            nearbyPlayer.health = Mathf.Min(nearbyPlayer.health + amount, 100);
+            nearbyPlayer.Heal(amount);
         }
 
         if (audioSource != null && pickupSound != null)

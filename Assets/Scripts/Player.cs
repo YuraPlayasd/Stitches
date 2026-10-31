@@ -5,8 +5,14 @@ using UnityEngine.UI;
 
 public class Player : MonoBehaviour
 {
+    [Header("Health Settings")]
     public int health = 100;
+    public int maxHealth = 100;
+    public Image healthImage;
+    public float invulnerabilityTime = 0.5f;
+    private bool isInvulnerable = false;
 
+    [Header("Movement")]
     public float moveSpeed = 5f;
     public float jumpforce = 10f;
     public Transform GroundChek;
@@ -25,8 +31,6 @@ public class Player : MonoBehaviour
     public int extraJumpesValue = 1;
     private int extraJumps;
 
-    public Image healthImage;
-
     private SpriteRenderer spriteRender;
 
     [Header("Shooting")] 
@@ -36,12 +40,24 @@ public class Player : MonoBehaviour
 
     private float nextArrowTime;
 
+    void Awake()
+    {
+        AutoFindHealthImage();
+    }
+
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
         extraJumps = extraJumpesValue;
         spriteRender = GetComponent<SpriteRenderer>();
+        if (spriteRender == null)
+        {
+            spriteRender = GetComponentInChildren<SpriteRenderer>();
+        }
+
+        AutoFindHealthImage();
+        UpdateHealthUI();
 
         IntroCutscene.EnsureCutsceneExists();
     }
@@ -85,12 +101,107 @@ public class Player : MonoBehaviour
             jumpBufferCounter = 0f;
         }
 
-        if (healthImage is not null)
-    {
-        healthImage.fillAmount = health / 100f;
-    }
+        UpdateHealthUI();
 
         SetAnimation(moveInput);
+    }
+
+    public void AutoFindHealthImage()
+    {
+        if (healthImage != null)
+        {
+            EnsureHealthImageSettings();
+            return;
+        }
+
+        // Direct search if active
+        GameObject healthObj = GameObject.Find("Health");
+        if (healthObj != null)
+        {
+            healthImage = healthObj.GetComponent<Image>();
+        }
+
+        // Search including inactive (e.g. while cutscene disables gameplayUI)
+        if (healthImage == null)
+        {
+            Image[] allImages = Object.FindObjectsByType<Image>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var img in allImages)
+            {
+                if (img.gameObject.name.Equals("Health", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    healthImage = img;
+                    break;
+                }
+            }
+
+            if (healthImage == null)
+            {
+                foreach (var img in allImages)
+                {
+                    if (img.transform.parent != null && img.transform.parent.name.Equals("HealthBar", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        healthImage = img;
+                        break;
+                    }
+                }
+            }
+        }
+
+        EnsureHealthImageSettings();
+    }
+
+    private void EnsureHealthImageSettings()
+    {
+        if (healthImage == null) return;
+
+        if (healthImage.type != Image.Type.Filled)
+        {
+            healthImage.type = Image.Type.Filled;
+            healthImage.fillMethod = Image.FillMethod.Horizontal;
+            healthImage.fillOrigin = (int)Image.OriginHorizontal.Left;
+        }
+    }
+
+    public void UpdateHealthUI()
+    {
+        if (healthImage == null)
+        {
+            AutoFindHealthImage();
+        }
+
+        if (healthImage != null)
+        {
+            EnsureHealthImageSettings();
+            float max = maxHealth > 0 ? maxHealth : 100f;
+            healthImage.fillAmount = Mathf.Clamp01((float)health / max);
+        }
+    }
+
+    public void TakeDamage(int damage)
+    {
+        if (isInvulnerable || health <= 0) return;
+
+        health -= damage;
+        health = Mathf.Max(0, health);
+        UpdateHealthUI();
+
+        if (rb != null)
+        {
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, 1.5f * jumpforce);
+        }
+
+        StartCoroutine(BlinkRed());
+
+        if (health <= 0)
+        {
+            Die();
+        }
+    }
+
+    public void Heal(int amount)
+    {
+        health = Mathf.Min(health + amount, maxHealth);
+        UpdateHealthUI();
     }
 
     private void Jump()
@@ -152,28 +263,73 @@ public class Player : MonoBehaviour
     
     private void OnCollisionEnter2D(Collision2D collision)
     {
-        if (collision.gameObject.CompareTag("Damage"))
+        CheckDamage(collision.gameObject);
+    }
+
+    private void OnCollisionStay2D(Collision2D collision)
+    {
+        CheckDamage(collision.gameObject);
+    }
+
+    private void OnTriggerEnter2D(Collider2D collider)
+    {
+        CheckDamage(collider.gameObject);
+    }
+
+    private void OnTriggerStay2D(Collider2D collider)
+    {
+        CheckDamage(collider.gameObject);
+    }
+
+    private void CheckDamage(GameObject target)
+    {
+        if (target == null) return;
+
+        bool isDamage = target.CompareTag("Damage") ||
+                        (target.transform.parent != null && target.transform.parent.CompareTag("Damage")) ||
+                        target.GetComponent<Enemy>() != null ||
+                        (target.transform.parent != null && target.transform.parent.GetComponent<Enemy>() != null);
+
+        if (isDamage)
         {
-            health -= 25;
-            rb.linearVelocity = new Vector2(rb.linearVelocity.x, 1.5f * jumpforce);
-            StartCoroutine(BlinkRed());
-            if (health <= 0)
-            {
-                Die();
-            }
+            TakeDamage(25);
         }
     }
 
     private IEnumerator BlinkRed()
     {
-        spriteRender.color = Color.red;
-        yield return new WaitForSeconds(0.1f);
-        spriteRender.color = Color.white;
+        isInvulnerable = true;
+        if (spriteRender != null)
+        {
+            spriteRender.color = Color.red;
+        }
+
+        yield return new WaitForSeconds(0.15f);
+
+        if (spriteRender != null)
+        {
+            spriteRender.color = Color.white;
+        }
+
+        if (invulnerabilityTime > 0.15f)
+        {
+            yield return new WaitForSeconds(invulnerabilityTime - 0.15f);
+        }
+
+        isInvulnerable = false;
     }
 
     public void Die()
     {
-        SceneManager.LoadScene("GameScene");
+        string currentScene = SceneManager.GetActiveScene().name;
+        if (string.IsNullOrEmpty(currentScene))
+        {
+            SceneManager.LoadScene("GameScene");
+        }
+        else
+        {
+            SceneManager.LoadScene(currentScene);
+        }
     }
 
     private void Shoot()
@@ -211,5 +367,4 @@ public class Player : MonoBehaviour
             arrowRb.linearVelocity = new Vector2(shootDir * arrowSpeed, 0f);
         }
     }
-    
 }
