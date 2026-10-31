@@ -34,7 +34,9 @@ public class Player : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
         extraJumps = extraJumpesValue;
-        spriteRender = GetComponent<SpriteRenderer>(); 
+        spriteRender = GetComponent<SpriteRenderer>();
+
+        IntroCutscene.EnsureCutsceneExists();
     }
 
     void Update()
