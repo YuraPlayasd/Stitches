@@ -1,2 +1,10 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Exclude third-party assets and Unity shaders from GitHub language statistics
+Assets/TextMesh\ Pro/** linguist-vendored
+*.shader linguist-detectable=false
+*.hlsl linguist-detectable=false
+*.cginc linguist-detectable=false
+*.shadergraph linguist-detectable=false
+
