@@ -48,6 +48,9 @@ TagManager:
   - name: Decorations
     uniqueID: 1852093842
     locked: 0
+  - name: Furniture
+    uniqueID: 1510258469
+    locked: 0
   - name: TileMap
     uniqueID: 4187219063
     locked: 0

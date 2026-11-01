@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public enum EnemyType
@@ -30,7 +31,19 @@ public class Enemy : MonoBehaviour
     [Tooltip("Horizontal sight range to detect the player")]
     public float detectionRadius = 5f;
     [Tooltip("Maximum vertical height difference to detect the player (sight is constrained horizontally)")]
-    public float maxVerticalDistance = 1.8f;
+    public float maxVerticalDistance = 4f;
+
+    [Header("Obstacle & Ledge Detection")]
+    [Tooltip("Layer considered solid ground / obstacles (defaults to Ground)")]
+    public LayerMask groundLayer;
+    [Tooltip("Prevents ground enemies (Skeleton/Zombie) from walking off ledges / cliffs during patrol")]
+    public bool stopAtLedges = true;
+    [Tooltip("If true, enemies also stop at ledges when chasing the player. If false (default), player can bait them to fall off cliffs!")]
+    public bool stopAtLedgesWhenChasing = false;
+    [Tooltip("Requires clear line-of-sight to player (blocked by walls/floors)")]
+    public bool requireLineOfSight = true;
+    [Tooltip("When chasing, stop at patrol waypoint boundaries instead of running off")]
+    public bool stayWithinWaypoints = false;
 
     [Header("Death Animation")]
     public float deathDuration = 0.65f;
@@ -38,16 +51,104 @@ public class Enemy : MonoBehaviour
     private SpriteRenderer spriteRenderer;
     private Animator animator;
     private Collider2D enemyCollider;
+    private Collider2D[] myColliders;
     private Rigidbody2D rb;
     private bool isDead = false;
+
+    // Static registry so enemies can pass through each other without collision
+    private static readonly HashSet<Collider2D> allEnemyColliders = new HashSet<Collider2D>();
+
+    void OnEnable()
+    {
+        RegisterEnemyColliders();
+    }
+
+    void OnDisable()
+    {
+        UnregisterEnemyColliders();
+    }
+
+    void OnDestroy()
+    {
+        UnregisterEnemyColliders();
+    }
+
+    private void RegisterEnemyColliders()
+    {
+        if (enemyCollider == null)
+        {
+            enemyCollider = GetComponent<Collider2D>();
+        }
+
+        myColliders = GetComponentsInChildren<Collider2D>(true);
+        if (myColliders == null || myColliders.Length == 0) return;
+
+        // Clean up stale destroyed colliders
+        allEnemyColliders.RemoveWhere(col => col == null);
+
+        // Ignore collisions between this enemy and all other active enemies
+        foreach (var otherCol in allEnemyColliders)
+        {
+            if (otherCol == null) continue;
+            foreach (var myCol in myColliders)
+            {
+                if (myCol != null && myCol != otherCol)
+                {
+                    Physics2D.IgnoreCollision(myCol, otherCol, true);
+                }
+            }
+        }
+
+        // Add this enemy's colliders to the static set
+        foreach (var myCol in myColliders)
+        {
+            if (myCol != null)
+            {
+                allEnemyColliders.Add(myCol);
+            }
+        }
+    }
+
+    private void UnregisterEnemyColliders()
+    {
+        if (myColliders != null)
+        {
+            foreach (var myCol in myColliders)
+            {
+                if (myCol != null)
+                {
+                    allEnemyColliders.Remove(myCol);
+                }
+            }
+        }
+    }
 
     void Awake()
     {
         InitializeHealth();
+        InitGroundLayer();
+    }
+
+    private void InitGroundLayer()
+    {
+        if (groundLayer.value == 0)
+        {
+            int ground = LayerMask.NameToLayer("Ground");
+            if (ground >= 0)
+            {
+                groundLayer = 1 << ground;
+            }
+            else
+            {
+                groundLayer = 1 << 6;
+            }
+        }
     }
 
     void Start()
     {
+        InitGroundLayer();
+
         spriteRenderer = GetComponent<SpriteRenderer>();
         if (spriteRenderer == null)
         {
@@ -102,6 +203,8 @@ public class Enemy : MonoBehaviour
             GameObject p = GameObject.FindWithTag("Player");
             if (p != null) targetPlayer = p.transform;
         }
+
+        RegisterEnemyColliders();
     }
 
     private void OnValidate()
@@ -140,6 +243,13 @@ public class Enemy : MonoBehaviour
     {
         if (isDead) return;
 
+        // Clean up enemies falling far below the level
+        if (transform.position.y < -35f)
+        {
+            Die();
+            return;
+        }
+
         if (CanSeePlayer())
         {
             ChasePlayer();
@@ -157,8 +267,35 @@ public class Enemy : MonoBehaviour
         float dx = Mathf.Abs(transform.position.x - targetPlayer.position.x);
         float dy = Mathf.Abs(transform.position.y - targetPlayer.position.y);
 
-        // Mobs see only horizontally (within detectionRadius along X, and roughly on the same floor level along Y)
-        return dx <= detectionRadius && dy <= maxVerticalDistance;
+        // 1. Distance thresholds
+        if (dx > detectionRadius || (maxVerticalDistance > 0f && dy > maxVerticalDistance))
+        {
+            return false;
+        }
+
+        // 2. Spirits ignore physical sight blocking
+        if (enemyType == EnemyType.Spirit || !requireLineOfSight)
+        {
+            return true;
+        }
+
+        // 3. Line-of-sight raycast from eye level to player center (blocked by floors / walls)
+        Vector2 eyeOrigin = (Vector2)transform.position + Vector2.up * 0.4f;
+        Vector2 targetCenter = (Vector2)targetPlayer.position + Vector2.up * 0.4f;
+        Vector2 toPlayer = targetCenter - eyeOrigin;
+        float dist = toPlayer.magnitude;
+
+        if (dist > 0.1f)
+        {
+            RaycastHit2D hit = Physics2D.Raycast(eyeOrigin, toPlayer.normalized, dist, groundLayer);
+            if (hit.collider != null && hit.collider.gameObject != targetPlayer.gameObject && !hit.collider.transform.IsChildOf(targetPlayer))
+            {
+                // Obstructed by floor or wall! Enemy cannot see through it
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public void TakeDamage(int damage)
@@ -177,6 +314,7 @@ public class Enemy : MonoBehaviour
     private void Die()
     {
         isDead = true;
+        UnregisterEnemyColliders();
 
         if (enemyCollider != null)
         {
@@ -211,6 +349,40 @@ public class Enemy : MonoBehaviour
         }
     }
 
+    public bool IsLedgeAhead(float moveDirX)
+    {
+        if (!stopAtLedges || enemyType == EnemyType.Spirit) return false;
+        if (Mathf.Abs(moveDirX) < 0.01f) return false;
+
+        float dirSign = moveDirX > 0 ? 1f : -1f;
+        Bounds bounds = enemyCollider != null ? enemyCollider.bounds : new Bounds(transform.position, Vector3.one);
+
+        // Check slightly ahead of the front foot
+        float frontX = bounds.center.x + dirSign * (bounds.extents.x + 0.15f);
+        float footY = bounds.min.y + 0.15f;
+        Vector2 checkOrigin = new Vector2(frontX, footY);
+        float ledgeCheckDist = 0.8f;
+
+        RaycastHit2D groundHit = Physics2D.Raycast(checkOrigin, Vector2.down, ledgeCheckDist, groundLayer);
+        return groundHit.collider == null;
+    }
+
+    public bool IsWallAhead(float moveDirX)
+    {
+        if (enemyType == EnemyType.Spirit) return false;
+        if (Mathf.Abs(moveDirX) < 0.01f) return false;
+
+        float dirSign = moveDirX > 0 ? 1f : -1f;
+        Bounds bounds = enemyCollider != null ? enemyCollider.bounds : new Bounds(transform.position, Vector3.one);
+
+        float footY = bounds.min.y + 0.3f;
+        Vector2 checkOrigin = new Vector2(bounds.center.x, footY);
+        float checkDist = bounds.extents.x + 0.15f;
+
+        RaycastHit2D wallHit = Physics2D.Raycast(checkOrigin, Vector2.right * dirSign, checkDist, groundLayer);
+        return wallHit.collider != null;
+    }
+
     private void Patrol()
     {
         if (waypoints == null || waypoints.Length == 0) return;
@@ -218,10 +390,11 @@ public class Enemy : MonoBehaviour
         Transform targetPoint = waypoints[currentPointIndex];
         if (targetPoint == null) return;
 
-        // Check distance purely along X axis
-        float distanceX = Mathf.Abs(transform.position.x - targetPoint.position.x);
+        float dirX = targetPoint.position.x - transform.position.x;
+        float distanceX = Mathf.Abs(dirX);
 
-        if (distanceX < 0.2f)
+        // If reached waypoint, or a cliff / wall is directly ahead, reverse patrol direction
+        if (distanceX < 0.25f || IsLedgeAhead(dirX) || IsWallAhead(dirX))
         {
             currentPointIndex++;
             if (currentPointIndex >= waypoints.Length)
@@ -230,10 +403,15 @@ public class Enemy : MonoBehaviour
             }
             targetPoint = waypoints[currentPointIndex];
             if (targetPoint == null) return;
+            dirX = targetPoint.position.x - transform.position.x;
         }
 
-        Vector2 targetPosition = new Vector2(targetPoint.position.x, transform.position.y);
-        transform.position = Vector2.MoveTowards(transform.position, targetPosition, patrolSpeed * Time.deltaTime);
+        // Only advance if path is clear of ledges and walls
+        if (!IsLedgeAhead(dirX) && !IsWallAhead(dirX))
+        {
+            Vector2 targetPosition = new Vector2(targetPoint.position.x, transform.position.y);
+            transform.position = Vector2.MoveTowards(transform.position, targetPosition, patrolSpeed * Time.deltaTime);
+        }
 
         FlipSprite(targetPoint.position.x);
     }
@@ -241,6 +419,39 @@ public class Enemy : MonoBehaviour
     private void ChasePlayer()
     {
         if (targetPlayer == null) return;
+
+        float dirX = targetPlayer.position.x - transform.position.x;
+
+        // If configured to stop at ledges during chase, stop; otherwise charge forward (bait mechanic)
+        if ((stopAtLedgesWhenChasing && IsLedgeAhead(dirX)) || IsWallAhead(dirX))
+        {
+            FlipSprite(targetPlayer.position.x);
+            return;
+        }
+
+        // Optional waypoint clamping: don't chase far beyond patrol zone
+        if (stayWithinWaypoints && waypoints != null && waypoints.Length >= 2)
+        {
+            float minX = float.MaxValue;
+            float maxX = float.MinValue;
+            foreach (var wp in waypoints)
+            {
+                if (wp != null)
+                {
+                    minX = Mathf.Min(minX, wp.position.x);
+                    maxX = Mathf.Max(maxX, wp.position.x);
+                }
+            }
+            if (minX <= maxX)
+            {
+                if ((dirX < 0 && transform.position.x <= minX) ||
+                    (dirX > 0 && transform.position.x >= maxX))
+                {
+                    FlipSprite(targetPlayer.position.x);
+                    return;
+                }
+            }
+        }
 
         Vector2 targetPosition = new Vector2(targetPlayer.position.x, transform.position.y);
         transform.position = Vector2.MoveTowards(transform.position, targetPosition, chaseSpeed * Time.deltaTime);
@@ -257,11 +468,41 @@ public class Enemy : MonoBehaviour
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
+        if (collision.collider != null && (collision.collider.GetComponent<Enemy>() != null || collision.collider.GetComponentInParent<Enemy>() != null))
+        {
+            if (myColliders != null)
+            {
+                foreach (var myCol in myColliders)
+                {
+                    if (myCol != null)
+                    {
+                        Physics2D.IgnoreCollision(myCol, collision.collider, true);
+                    }
+                }
+            }
+            return;
+        }
+
         CheckHazard(collision.gameObject);
     }
 
     private void OnCollisionStay2D(Collision2D collision)
     {
+        if (collision.collider != null && (collision.collider.GetComponent<Enemy>() != null || collision.collider.GetComponentInParent<Enemy>() != null))
+        {
+            if (myColliders != null)
+            {
+                foreach (var myCol in myColliders)
+                {
+                    if (myCol != null)
+                    {
+                        Physics2D.IgnoreCollision(myCol, collision.collider, true);
+                    }
+                }
+            }
+            return;
+        }
+
         CheckHazard(collision.gameObject);
     }
 
@@ -295,5 +536,17 @@ public class Enemy : MonoBehaviour
     {
         Gizmos.color = Color.red;
         Gizmos.DrawWireCube(transform.position, new Vector3(detectionRadius * 2f, maxVerticalDistance * 2f, 0.1f));
+
+        // Draw ledge detection ray in editor
+        if (enemyCollider != null)
+        {
+            float dirSign = (spriteRenderer != null && spriteRenderer.flipX) ? 1f : -1f;
+            Bounds bounds = enemyCollider.bounds;
+            float frontX = bounds.center.x + dirSign * (bounds.extents.x + 0.15f);
+            float footY = bounds.min.y + 0.15f;
+            Vector2 checkOrigin = new Vector2(frontX, footY);
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawLine(checkOrigin, checkOrigin + Vector2.down * 0.8f);
+        }
     }
 }

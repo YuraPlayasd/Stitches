@@ -93,6 +93,9 @@ public class Player : MonoBehaviour
     private float jumpCooldownTimer = 0f;
     private float moveInput = 0f;
 
+    [Header("Moving Platform")]
+    private MovingPlatforms activeMovingPlatform;
+
     [Header("One-Way Platform")]
     private Collider2D currentOneWayPlatform;
     private float dropThroughTimer = 0f;
@@ -128,6 +131,11 @@ public class Player : MonoBehaviour
         {
             rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
             rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+        }
+
+        if (transform.parent != null && transform.parent.GetComponent<MovingPlatforms>() != null)
+        {
+            transform.SetParent(null);
         }
         animator = GetComponent<Animator>();
         extraJumps = extraJumpesValue;
@@ -398,8 +406,10 @@ public class Player : MonoBehaviour
         isOnSlope = false;
         if (rb != null)
         {
-            rb.linearVelocity = new Vector2(moveInput * moveSpeed, jumpforce);
+            Vector2 platformVel = activeMovingPlatform != null ? activeMovingPlatform.Velocity : Vector2.zero;
+            rb.linearVelocity = new Vector2(moveInput * moveSpeed + platformVel.x, jumpforce);
         }
+        activeMovingPlatform = null;
     }
 
     private void FixedUpdate()
@@ -432,6 +442,7 @@ public class Player : MonoBehaviour
         isOnSlope = false;
         slopeNormal = Vector2.up;
         slopeAngle = 0f;
+        Collider2D groundCollider = null;
 
         // 1. Traditional OverlapCircle check at GroundChek position if assigned
         if (GroundChek != null)
@@ -442,6 +453,7 @@ public class Player : MonoBehaviour
                 if (c != null && c != playerCollider && (dropThroughTimer <= 0f || c != currentOneWayPlatform))
                 {
                     grounded = true;
+                    groundCollider = c;
                     break;
                 }
             }
@@ -473,6 +485,7 @@ public class Player : MonoBehaviour
 
             if (foundHit)
             {
+                groundCollider = validHit.collider;
                 float distanceToGround = Mathf.Max(0f, validHit.distance - (bounds.extents.y - 0.05f));
 
                 // Sample multiple raycasts downward across player width to accurately determine ground normal
@@ -484,6 +497,10 @@ public class Player : MonoBehaviour
                 RaycastHit2D centerHit = Physics2D.Raycast(new Vector2(bounds.center.x, rayY), Vector2.down, rayDist, groundLayer);
                 RaycastHit2D leftHit = Physics2D.Raycast(new Vector2(bounds.center.x - halfWidth, rayY), Vector2.down, rayDist, groundLayer);
                 RaycastHit2D rightHit = Physics2D.Raycast(new Vector2(bounds.center.x + halfWidth, rayY), Vector2.down, rayDist, groundLayer);
+
+                if (centerHit.collider != null) groundCollider = centerHit.collider;
+                else if (leftHit.collider != null) groundCollider = leftHit.collider;
+                else if (rightHit.collider != null) groundCollider = rightHit.collider;
 
                 Vector2 normal = Vector2.up;
 
@@ -539,6 +556,15 @@ public class Player : MonoBehaviour
 
         isGrounded = grounded;
 
+        if (isGrounded && groundCollider != null)
+        {
+            activeMovingPlatform = groundCollider.GetComponent<MovingPlatforms>() ?? groundCollider.GetComponentInParent<MovingPlatforms>();
+        }
+        else if (!isGrounded)
+        {
+            activeMovingPlatform = null;
+        }
+
         if (!isGrounded)
         {
             airTime += Time.fixedDeltaTime;
@@ -559,6 +585,12 @@ public class Player : MonoBehaviour
     {
         if (rb == null) return;
 
+        Vector2 platformVel = Vector2.zero;
+        if (isGrounded && !isJumping && activeMovingPlatform != null)
+        {
+            platformVel = activeMovingPlatform.Velocity;
+        }
+
         if (isJumping && jumpCooldownTimer > 0f)
         {
             rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
@@ -571,12 +603,12 @@ public class Player : MonoBehaviour
             if (Mathf.Abs(moveInput) > 0.01f)
             {
                 // Move smoothly along the slope surface
-                rb.linearVelocity = slopeDir * (moveInput * moveSpeed);
+                rb.linearVelocity = slopeDir * (moveInput * moveSpeed) + platformVel;
             }
             else
             {
                 // Stand still on slope without sliding down
-                rb.linearVelocity = Vector2.zero;
+                rb.linearVelocity = platformVel;
             }
         }
         else
@@ -585,10 +617,17 @@ public class Player : MonoBehaviour
             float yVel = rb.linearVelocity.y;
             if (isGrounded && yVel < 0.05f && yVel > -2f)
             {
-                // Zero out micro-downward velocity on flat ground so player doesn't push into floor seams or jitter
-                yVel = 0f;
+                if (Mathf.Abs(platformVel.y) > 0.01f)
+                {
+                    yVel = platformVel.y;
+                }
+                else
+                {
+                    // Zero out micro-downward velocity on flat ground so player doesn't push into floor seams or jitter
+                    yVel = 0f;
+                }
             }
-            rb.linearVelocity = new Vector2(moveInput * moveSpeed, yVel);
+            rb.linearVelocity = new Vector2(moveInput * moveSpeed + platformVel.x, yVel);
         }
     }
 
@@ -758,11 +797,44 @@ public class Player : MonoBehaviour
     private void OnCollisionEnter2D(Collision2D collision)
     {
         CheckDamage(collision.gameObject);
+        CheckMovingPlatformContact(collision);
     }
 
     private void OnCollisionStay2D(Collision2D collision)
     {
         CheckDamage(collision.gameObject);
+        CheckMovingPlatformContact(collision);
+    }
+
+    private void OnCollisionExit2D(Collision2D collision)
+    {
+        if (activeMovingPlatform != null)
+        {
+            if (collision.gameObject == activeMovingPlatform.gameObject ||
+                collision.transform.IsChildOf(activeMovingPlatform.transform))
+            {
+                activeMovingPlatform = null;
+            }
+        }
+    }
+
+    private void CheckMovingPlatformContact(Collision2D collision)
+    {
+        if (activeMovingPlatform == null && !isJumping)
+        {
+            if (collision.gameObject.TryGetComponent<MovingPlatforms>(out var platform) ||
+                (collision.transform.parent != null && collision.transform.parent.TryGetComponent<MovingPlatforms>(out platform)))
+            {
+                for (int i = 0; i < collision.contactCount; i++)
+                {
+                    if (collision.contacts[i].normal.y > 0.5f)
+                    {
+                        activeMovingPlatform = platform;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     private void OnTriggerEnter2D(Collider2D collider)
@@ -897,6 +969,7 @@ public class Player : MonoBehaviour
 
     public void Die()
     {
+        activeMovingPlatform = null;
         if (walkAudioSource != null && walkAudioSource.isPlaying)
         {
             walkAudioSource.Stop();
