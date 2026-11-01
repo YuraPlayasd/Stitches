@@ -145,15 +145,20 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 0
-        y: 0
+        y: 98
         width: 256
-        height: 256
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+        height: 176
+      alignment: 7
+      pivot: {x: 0.5, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
-      physicsShape: []
+      physicsShape:
+      - - {x: 128, y: 70}
+        - {x: -109, y: 69}
+        - {x: -128, y: 69}
+        - {x: -128, y: -88}
+        - {x: 128, y: -88}
       tessellationDetail: 0
       bones: []
       spriteID: 2d009a6b596c7d760800000000000000
