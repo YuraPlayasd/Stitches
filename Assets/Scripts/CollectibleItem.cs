@@ -19,7 +19,7 @@ public class CollectibleItem : MonoBehaviour
     [Header("Collectible Type & Value")]
     public CollectibleType itemType = CollectibleType.FrankHead;
     [Tooltip("Display name used in pickup prompt (e.g., Frank's Head, Healing Potion, Arrows)")]
-    public string itemName = "Голова Франка";
+    public string itemName = "Frank's Head";
     [Tooltip("Amount restored/given (e.g. 25 for +25 HP, 5 for +5 Arrows, 1 for Body Part)")]
     public int amount = 1;
 
@@ -39,9 +39,9 @@ public class CollectibleItem : MonoBehaviour
     public GameObject dialoguePanel;
     public TextMeshProUGUI speakerNameText;
     public TextMeshProUGUI dialogueText;
-    public string speakerName = "Голова Франка";
+    public string speakerName = "Frank's Head";
     [TextArea(2, 4)]
-    public string pickupSpeech = "Обережно, Лікарю! Не впустіть мене! А тепер ходімо досліджувати замок і знайдемо всі мої частини тіла!";
+    public string pickupSpeech = "Careful, Doctor! Don't drop me! Now let's explore the castle and find all my body parts!";
     public float speechDuration = 3.5f;
 
     [Header("Visual Effects")]
@@ -208,19 +208,19 @@ public class CollectibleItem : MonoBehaviour
         switch (itemType)
         {
             case CollectibleType.FrankHead:
-                return $"[ {pickupKey} ] Підібрати Голову Франка";
+                return $"[ {pickupKey} ] Pick up Frank's Head";
             case CollectibleType.FrankArm:
-                return $"[ {pickupKey} ] Підібрати Руку Франка";
+                return $"[ {pickupKey} ] Pick up Frank's Arm";
             case CollectibleType.FrankTorso:
-                return $"[ {pickupKey} ] Підібрати Тулуб Франка";
+                return $"[ {pickupKey} ] Pick up Frank's Torso";
             case CollectibleType.FrankLeg:
-                return $"[ {pickupKey} ] Підібрати Ногу Франка";
+                return $"[ {pickupKey} ] Pick up Frank's Leg";
             case CollectibleType.Health:
-                return $"[ {pickupKey} ] Підібрати Здоров'я (+{amount} HP)";
+                return $"[ {pickupKey} ] Pick up Health (+{amount} HP)";
             case CollectibleType.Arrows:
-                return $"[ {pickupKey} ] Підібрати Стріли (+{amount})";
+                return $"[ {pickupKey} ] Pick up Arrows (+{amount})";
             default:
-                return $"[ {pickupKey} ] Підібрати {itemName}";
+                return $"[ {pickupKey} ] Pick up {itemName}";
         }
     }
 
@@ -263,6 +263,13 @@ public class CollectibleItem : MonoBehaviour
         }
 
         // Show dialogue message if configured (for Frank body parts)
+        if (itemType == CollectibleType.FrankHead && FrankVision.Instance != null && !string.IsNullOrEmpty(pickupSpeech))
+        {
+            FrankVision.Instance.Speak(pickupSpeech, FrankDialoguePriority.Story, speechDuration);
+            gameObject.SetActive(false);
+            return;
+        }
+
         if (dialoguePanel != null && dialogueText != null && !string.IsNullOrEmpty(pickupSpeech))
         {
             StartCoroutine(ShowPickupSpeechRoutine());

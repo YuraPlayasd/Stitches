@@ -70,20 +70,20 @@ public class IntroCutscene : MonoBehaviour
     [Header("Continue Prompt Settings")]
     public GameObject continuePrompt;
     public TextMeshProUGUI continuePromptText;
-    public string promptMessage = "[ Натисніть ПРОБІЛ або E щоб продовжити ]";
+    public string promptMessage = "[ Press SPACE or E to continue ]";
     public KeyCode continueKey = KeyCode.Space;
     public KeyCode alternateKey = KeyCode.E;
     public bool blinkPrompt = true;
     public float blinkSpeed = 2.5f;
     public float autoContinueSeconds = 0f;
 
-    [Header("Dialogue Texts (Ukrainian)")]
-    public string frankSpeakerName = "Франк";
-    public string headSpeakerName = "Голова Франка";
+    [Header("Dialogue Texts")]
+    public string frankSpeakerName = "Frank";
+    public string headSpeakerName = "Frank's Head";
     [TextArea(2, 4)]
-    public string screamText = "А-А-А-А-А-А-А-А-А-А-А-А-А-А!!!";
+    public string screamText = "A-A-A-A-A-A-A-A-A-A-A-A-A-A!!!";
     [TextArea(3, 6)]
-    public string monologueText = "Лікарю! Я настільки злякався, що кожна частина мого тіла розлетілася й телепортувалася в різні частини замку! Ми мусимо знайти їх усі!";
+    public string monologueText = "Doctor! I was so terrified that every part of my body flew off and teleported to different parts of the castle! We must find them all!";
 
     [Header("Gameplay Transition")]
     public GameObject gameplayUI;
@@ -451,7 +451,7 @@ public class IntroCutscene : MonoBehaviour
                 cb.pressedColor = new Color(0.2f, 0.6f, 0.9f, 1f);
                 btn.colors = cb;
 
-                TextMeshProUGUI skipTxt = CreateTMP(skipObj.transform, "SkipText", "Пропустити >> [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
+                TextMeshProUGUI skipTxt = CreateTMP(skipObj.transform, "SkipText", "Skip >> [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
                 RectTransform txtRt = skipTxt.transform as RectTransform;
                 if (txtRt != null)
                 {
@@ -531,6 +531,8 @@ public class IntroCutscene : MonoBehaviour
         tmp.fontStyle = style;
         tmp.color = color;
         tmp.raycastTarget = false;
+        TMP_FontAsset electronicFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/Electronic Highway Sign SDF");
+        if (electronicFont != null) tmp.font = electronicFont;
         return tmp;
     }
 
@@ -725,14 +727,14 @@ public class IntroCutscene : MonoBehaviour
             collectible.enabled = true;
             collectible.interactionDistance = 2.5f;
             collectible.itemType = CollectibleType.FrankHead;
-            collectible.itemName = "Голова Франка";
+            collectible.itemName = "Frank's Head";
             collectible.requireKeyPress = false;
             collectible.pickupKey = KeyCode.E;
             collectible.dialoguePanel = dialoguePanel;
             collectible.dialogueText = dialogueText;
             collectible.speakerNameText = speakerNameText;
             collectible.speakerName = headSpeakerName;
-            collectible.pickupSpeech = "Обережно, Лікарю! Не впустіть мене! А тепер ходімо досліджувати замок і знайдемо всі мої частини тіла!";
+            collectible.pickupSpeech = "Careful, Doctor! Don't drop me! Now let's explore the castle and find all my body parts!";
             collectible.enableBobbing = true;
             collectible.SetInitialPosition(headRenderer.transform.position);
 
@@ -835,14 +837,14 @@ public class IntroCutscene : MonoBehaviour
             collectible.enabled = true;
             collectible.interactionDistance = 2.5f;
             collectible.itemType = CollectibleType.FrankHead;
-            collectible.itemName = "Голова Франка";
+            collectible.itemName = "Frank's Head";
             collectible.requireKeyPress = false;
             collectible.pickupKey = KeyCode.E;
             collectible.dialoguePanel = dialoguePanel;
             collectible.dialogueText = dialogueText;
             collectible.speakerNameText = speakerNameText;
             collectible.speakerName = headSpeakerName;
-            collectible.pickupSpeech = "Обережно, Лікарю! Не впустіть мене! А тепер ходімо досліджувати замок і знайдемо всі мої частини тіла!";
+            collectible.pickupSpeech = "Careful, Doctor! Don't drop me! Now let's explore the castle and find all my body parts!";
             collectible.enableBobbing = true;
             collectible.SetInitialPosition(headGroundPos);
 

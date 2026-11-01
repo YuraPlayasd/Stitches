@@ -43,6 +43,11 @@ public static class BodyPartsTracker
 
         Debug.Log($"<color=#5CE6B0><b>[BodyPartsTracker]</b></color> Collected: <b>{type}</b>! Total Parts: <b>{TotalPartsCollected} / {TotalRequiredParts}</b> (Head: {HasHead}, Torso: {HasTorso}, Arms: {ArmsCollected}/2, Legs: {LegsCollected}/2)");
         OnPartCollected?.Invoke(type, TotalPartsCollected);
+
+        if (type == CollectibleType.FrankHead && FrankVision.Instance != null)
+        {
+            FrankVision.Instance.CheckLocationAnnouncement(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+        }
     }
 
     public static void ResetTracker()

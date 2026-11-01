@@ -31,7 +31,7 @@ public static class Ensure2DLighting
         Debug.Log($"<color=green>[Ensure2DLighting]</color> Checked active scene '{activeScene.name}'. Updated {fixedCount} light(s).");
     }
 
-    [MenuItem("Tools/Fix 2D Lighting for All Scenes (Освітлення для всіх сцен)", false, 21)]
+    [MenuItem("Tools/Fix 2D Lighting for All Scenes", false, 21)]
     public static void FixAllScenes()
     {
         string[] scenePaths = new[]

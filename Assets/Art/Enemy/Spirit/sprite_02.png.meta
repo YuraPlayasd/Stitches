@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 8831bc148d0945b49b2755136bf876de
+guid: 8d7f64f3ec08b70498930e091768b746
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 155908569747412423
-    second: EvilPumpkin _0
+      213: 8185563065791875171
+    second: sprite_02_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -115,13 +115,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: EvilPumpkin _0
+      name: sprite_02_0
       rect:
         serializedVersion: 2
-        x: 51
-        y: 0
-        width: 149
-        height: 256
+        x: 79
+        y: 143
+        width: 306
+        height: 338
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -130,8 +130,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 7c5db35a406e92200800000000000000
-      internalID: 155908569747412423
+      spriteID: 36805174d36f89170800000000000000
+      internalID: 8185563065791875171
       vertices: []
       indices: 
       edges: []
@@ -150,7 +150,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      EvilPumpkin _0: 155908569747412423
+      sprite_02_0: 8185563065791875171
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

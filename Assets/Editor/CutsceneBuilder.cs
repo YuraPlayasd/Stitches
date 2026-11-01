@@ -8,7 +8,7 @@ using Unity.Cinemachine;
 
 public static class CutsceneBuilder
 {
-    [MenuItem("Tools/Setup Intro Cutscene (Франк & Блискавка)", false, 1)]
+    [MenuItem("Tools/Setup Intro Cutscene (Frank & Lightning)", false, 1)]
     public static void ManualBuild()
     {
         BuildCutscene(false);
@@ -137,11 +137,11 @@ public static class CutsceneBuilder
         if (headCollectible == null) headCollectible = Undo.AddComponent<CollectibleItem>(headObj);
         headCollectible.interactionDistance = 2.5f;
         headCollectible.itemType = CollectibleType.FrankHead;
-        headCollectible.itemName = "Голова Франка";
+        headCollectible.itemName = "Frank's Head";
         headCollectible.requireKeyPress = false;
         headCollectible.pickupKey = KeyCode.E;
-        headCollectible.speakerName = "Голова Франка";
-        headCollectible.pickupSpeech = "Обережно, Лікарю! Не впустіть мене! А тепер ходімо досліджувати замок і знайдемо всі мої частини тіла!";
+        headCollectible.speakerName = "Frank's Head";
+        headCollectible.pickupSpeech = "Careful, Doctor! Don't drop me! Now let's explore the castle and find all my body parts!";
         headCollectible.enableBobbing = true;
         headCollectible.SetInitialPosition(new Vector3(basePosition.x, 0.85f, 0f));
 
@@ -301,7 +301,7 @@ public static class CutsceneBuilder
         diagBg.raycastTarget = false;
 
         // Speaker Name (Large bold text: 40)
-        TextMeshProUGUI speakerText = CreateOrGetTMP(dialogueObj.transform, "SpeakerName", "Франк", 40, FontStyles.Bold, new Color(0.35f, 0.95f, 0.72f));
+        TextMeshProUGUI speakerText = CreateOrGetTMP(dialogueObj.transform, "SpeakerName", "Frank", 40, FontStyles.Bold, new Color(0.35f, 0.95f, 0.72f));
         RectTransform speakerRt = speakerText.transform as RectTransform;
         if (speakerRt != null)
         {
@@ -329,7 +329,7 @@ public static class CutsceneBuilder
         dialogueText.fontSizeMax = 54;
 
         // Continue Prompt (Size 30, centered)
-        TextMeshProUGUI promptText = CreateOrGetTMP(dialogueObj.transform, "ContinuePrompt", "[ Натисніть ПРОБІЛ або E щоб продовжити ]", 30, FontStyles.Italic, new Color(1f, 0.88f, 0.40f));
+        TextMeshProUGUI promptText = CreateOrGetTMP(dialogueObj.transform, "ContinuePrompt", "[ Press SPACE or E to continue ]", 30, FontStyles.Italic, new Color(1f, 0.88f, 0.40f));
         RectTransform promptRt = promptText.transform as RectTransform;
         if (promptRt != null)
         {
@@ -345,7 +345,7 @@ public static class CutsceneBuilder
         cutscene.dialogueText = dialogueText;
         cutscene.continuePrompt = promptText.gameObject;
         cutscene.continuePromptText = promptText;
-        cutscene.promptMessage = "[ Натисніть ПРОБІЛ або E щоб продовжити ]";
+        cutscene.promptMessage = "[ Press SPACE or E to continue ]";
         cutscene.continueKey = KeyCode.Space;
         cutscene.alternateKey = KeyCode.E;
         cutscene.blinkPrompt = true;
@@ -394,7 +394,7 @@ public static class CutsceneBuilder
         Button sBtn = skipObj.GetComponent<Button>();
         if (sBtn == null) sBtn = skipObj.AddComponent<Button>();
 
-        TextMeshProUGUI skipTxt = CreateOrGetTMP(skipObj.transform, "SkipText", "Пропустити >> [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
+        TextMeshProUGUI skipTxt = CreateOrGetTMP(skipObj.transform, "SkipText", "Skip >> [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
         RectTransform txtRt = skipTxt.transform as RectTransform;
         if (txtRt != null)
         {
@@ -415,10 +415,10 @@ public static class CutsceneBuilder
         if (healthBar != null) cutscene.gameplayUI = healthBar;
 
         // Cutscene Dialogue Texts & Timings
-        cutscene.frankSpeakerName = "Франк";
-        cutscene.headSpeakerName = "Голова Франка";
-        cutscene.screamText = "А-А-А-А-А-А-А-А-А-А-А-А-А-А!!!";
-        cutscene.monologueText = "Лікарю! Я настільки злякався, що кожна частина мого тіла розлетілася й телепортувалася в різні частини замку! Ми мусимо знайти їх усі!";
+        cutscene.frankSpeakerName = "Frank";
+        cutscene.headSpeakerName = "Frank's Head";
+        cutscene.screamText = "A-A-A-A-A-A-A-A-A-A-A-A-A-A!!!";
+        cutscene.monologueText = "Doctor! I was so terrified that every part of my body flew off and teleported to different parts of the castle! We must find them all!";
 
         cutscene.delayBeforeStrike = 1.8f;
         cutscene.delayAfterStrike = 0.25f;
@@ -483,6 +483,8 @@ public static class CutsceneBuilder
         tmp.fontStyle = style;
         tmp.color = color;
         tmp.raycastTarget = false;
+        TMP_FontAsset electronicFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/Electronic Highway Sign SDF");
+        if (electronicFont != null) tmp.font = electronicFont;
         return tmp;
     }
 }

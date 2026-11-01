@@ -41,14 +41,31 @@ public class Player : MonoBehaviour
     private float nextArrowTime;
 
     [Header("Hitbox / Collider Settings")]
-    [Tooltip("BoxCollider2D гравця (якщо не вказано, знайдеться автоматично)")]
+    [Tooltip("Player's BoxCollider2D (automatically found if not assigned)")]
     public BoxCollider2D playerCollider;
-    [Tooltip("Чи змінювати розмір колайдера під час анімації падіння")]
+    [Tooltip("Whether to resize the collider during the fall animation")]
     public bool adjustHitboxOnFall = true;
-    [Tooltip("Розмір колайдера під час падіння (менший знизу відповідно до модельки під час падіння)")]
+    [Tooltip("Collider size during fall (smaller bottom to match sprite during fall animation)")]
     public Vector2 fallColliderSize = new Vector2(1.8f, 4.14f);
-    [Tooltip("Зсув колайдера під час падіння (піднятий знизу)")]
+    [Tooltip("Collider offset during fall (raised from the bottom)")]
     public Vector2 fallColliderOffset = new Vector2(0f, 0.275f);
+
+    [Header("Slope Settings")]
+    [Tooltip("Maximum slope angle in degrees that the player can walk on")]
+    public float maxSlopeAngle = 55f;
+    [Tooltip("Distance below player collider to check for ground and slopes")]
+    public float slopeCheckDistance = 0.5f;
+
+    private bool isOnSlope = false;
+    private Vector2 slopeNormal = Vector2.up;
+    private float slopeAngle = 0f;
+    private bool isJumping = false;
+    private float jumpCooldownTimer = 0f;
+    private float moveInput = 0f;
+
+    [Header("One-Way Platform")]
+    private Collider2D currentOneWayPlatform;
+    private float dropThroughTimer = 0f;
 
     private Vector2 defaultColliderSize;
     private Vector2 defaultColliderOffset;
@@ -77,18 +94,37 @@ public class Player : MonoBehaviour
         UpdateHealthUI();
 
         IntroCutscene.EnsureCutsceneExists();
+        FrankVision.EnsureExists(gameObject);
     }
 
     void Update()
     {
-        float moveInput = Input.GetAxis("Horizontal");
+        moveInput = Input.GetAxis("Horizontal");
         if (Input.GetKeyDown(KeyCode.F))
         {
             Shoot();
         }
-        rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
 
-        if (isGrounded)
+        if (jumpCooldownTimer > 0f)
+        {
+            jumpCooldownTimer -= Time.deltaTime;
+        }
+
+        if (dropThroughTimer > 0f)
+        {
+            dropThroughTimer -= Time.deltaTime;
+            if (dropThroughTimer <= 0f)
+            {
+                currentOneWayPlatform = null;
+            }
+        }
+
+        if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow))
+        {
+            TryDropThroughPlatform();
+        }
+
+        if (isGrounded || (isOnSlope && !isJumping))
         {
             extraJumps = extraJumpesValue;
         }
@@ -97,7 +133,7 @@ public class Player : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.Space))
         {
-            if (isGrounded)
+            if (isGrounded || (isOnSlope && !isJumping))
             {
                 Jump();
             }
@@ -112,7 +148,7 @@ public class Player : MonoBehaviour
             }
         }
 
-        if (isGrounded && jumpBufferCounter > 0f)
+        if ((isGrounded || (isOnSlope && !isJumping)) && jumpBufferCounter > 0f)
         {
             Jump();
             jumpBufferCounter = 0f;
@@ -204,6 +240,8 @@ public class Player : MonoBehaviour
 
         if (rb != null)
         {
+            isJumping = true;
+            jumpCooldownTimer = 0.2f;
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, 1.5f * jumpforce);
         }
 
@@ -221,14 +259,201 @@ public class Player : MonoBehaviour
         UpdateHealthUI();
     }
 
+    private void TryDropThroughPlatform()
+    {
+        if (playerCollider == null)
+        {
+            playerCollider = GetComponent<BoxCollider2D>();
+            if (playerCollider == null) return;
+        }
+
+        Bounds bounds = playerCollider.bounds;
+        Vector2 boxOrigin = bounds.center;
+        Vector2 boxSize = new Vector2(bounds.size.x * 0.85f, 0.25f);
+        float castDistance = bounds.extents.y + 0.35f;
+
+        RaycastHit2D[] hits = Physics2D.BoxCastAll(boxOrigin, boxSize, 0f, Vector2.down, castDistance, groundLayer);
+        foreach (var h in hits)
+        {
+            if (h.collider == null || h.collider == playerCollider) continue;
+
+            OneWayPlatform platform = h.collider.GetComponent<OneWayPlatform>();
+            if (platform == null)
+            {
+                platform = h.collider.GetComponentInParent<OneWayPlatform>();
+            }
+
+            if (platform != null)
+            {
+                platform.DropPlayer(playerCollider);
+                currentOneWayPlatform = h.collider;
+                dropThroughTimer = platform.dropDuration;
+                isGrounded = false;
+                isOnSlope = false;
+                if (rb != null)
+                {
+                    rb.linearVelocity = new Vector2(rb.linearVelocity.x, -2f);
+                }
+                break;
+            }
+        }
+    }
+
     private void Jump()
     {
-        rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpforce);
+        isJumping = true;
+        jumpCooldownTimer = 0.2f;
+        isGrounded = false;
+        isOnSlope = false;
+        if (rb != null)
+        {
+            rb.linearVelocity = new Vector2(moveInput * moveSpeed, jumpforce);
+        }
     }
 
     private void FixedUpdate()
     {
-        isGrounded = Physics2D.OverlapCircle(GroundChek.position, GroundChekRadius, groundLayer);
+        CheckGrounded();
+        ApplyMovement();
+    }
+
+    private void CheckGrounded()
+    {
+        if (isJumping && jumpCooldownTimer > 0f)
+        {
+            isGrounded = false;
+            isOnSlope = false;
+            return;
+        }
+
+        if (playerCollider == null)
+        {
+            playerCollider = GetComponent<BoxCollider2D>();
+        }
+
+        bool grounded = false;
+        isOnSlope = false;
+        slopeNormal = Vector2.up;
+        slopeAngle = 0f;
+
+        // 1. Traditional OverlapCircle check at GroundChek position if assigned
+        if (GroundChek != null)
+        {
+            Collider2D[] circleHits = Physics2D.OverlapCircleAll(GroundChek.position, GroundChekRadius, groundLayer);
+            foreach (var c in circleHits)
+            {
+                if (c != null && c != playerCollider && (dropThroughTimer <= 0f || c != currentOneWayPlatform))
+                {
+                    grounded = true;
+                    break;
+                }
+            }
+        }
+
+        // 2. BoxCast check across the width of the player collider
+        if (playerCollider != null)
+        {
+            Bounds bounds = playerCollider.bounds;
+            Vector2 boxOrigin = bounds.center;
+            Vector2 boxSize = new Vector2(bounds.size.x * 0.85f, 0.1f);
+            float castDistance = bounds.extents.y + slopeCheckDistance;
+
+            RaycastHit2D[] hits = Physics2D.BoxCastAll(boxOrigin, boxSize, 0f, Vector2.down, castDistance, groundLayer);
+            RaycastHit2D validHit = default;
+            bool foundHit = false;
+
+            foreach (var h in hits)
+            {
+                if (h.collider != null && h.collider != playerCollider)
+                {
+                    if (dropThroughTimer > 0f && h.collider == currentOneWayPlatform)
+                        continue;
+                    validHit = h;
+                    foundHit = true;
+                    break;
+                }
+            }
+
+            if (foundHit)
+            {
+                // Determine accurate surface normal via downward raycast at hit point
+                RaycastHit2D[] surfaceHits = Physics2D.RaycastAll(validHit.point + Vector2.up * 0.2f, Vector2.down, 0.5f, groundLayer);
+                Vector2 normal = validHit.normal;
+                foreach (var sh in surfaceHits)
+                {
+                    if (sh.collider != null && sh.collider != playerCollider)
+                    {
+                        if (dropThroughTimer > 0f && sh.collider == currentOneWayPlatform)
+                            continue;
+                        normal = sh.normal;
+                        break;
+                    }
+                }
+                float hitAngle = Vector2.Angle(normal, Vector2.up);
+
+                if (hitAngle <= maxSlopeAngle)
+                {
+                    float distanceToGround = Mathf.Max(0f, validHit.distance - (bounds.extents.y - 0.05f));
+                    float allowedDistance = hitAngle > 1f ? slopeCheckDistance : 0.2f;
+
+                    if (distanceToGround <= allowedDistance)
+                    {
+                        grounded = true;
+
+                        if (hitAngle > 1f)
+                        {
+                            isOnSlope = true;
+                            slopeNormal = normal;
+                            slopeAngle = hitAngle;
+
+                            // Downward slope snapping during descent to maintain seamless ground contact
+                            if (!isJumping && distanceToGround > 0.02f && distanceToGround <= 0.35f && rb != null && rb.linearVelocity.y <= 0.1f)
+                            {
+                                rb.position += Vector2.down * (distanceToGround - 0.005f);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        isGrounded = grounded;
+
+        if (isGrounded && jumpCooldownTimer <= 0f)
+        {
+            isJumping = false;
+        }
+    }
+
+    private void ApplyMovement()
+    {
+        if (rb == null) return;
+
+        if (isJumping && jumpCooldownTimer > 0f)
+        {
+            rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
+        }
+        else if (isOnSlope && isGrounded)
+        {
+            // Perpendicular vector pointing rightward along the slope surface
+            Vector2 slopeDir = new Vector2(slopeNormal.y, -slopeNormal.x).normalized;
+
+            if (Mathf.Abs(moveInput) > 0.01f)
+            {
+                // Move smoothly along the slope surface
+                rb.linearVelocity = slopeDir * (moveInput * moveSpeed);
+            }
+            else
+            {
+                // Stand still on slope without sliding down
+                rb.linearVelocity = Vector2.zero;
+            }
+        }
+        else
+        {
+            // Flat ground or airborne
+            rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
+        }
     }
 
     private void SetAnimation(float moveInput)
@@ -244,9 +469,9 @@ public class Player : MonoBehaviour
 
         string newAnimation;
 
-        if (isGrounded)
+        if (isGrounded || (isOnSlope && !isJumping))
         {
-            if (moveInput == 0)
+            if (Mathf.Abs(moveInput) < 0.01f)
             {
                 newAnimation = "Player_idle";
             }
@@ -257,7 +482,7 @@ public class Player : MonoBehaviour
         }
         else
         {
-            if (rb.linearVelocityY > 0.1f)
+            if (rb != null && rb.linearVelocityY > 0.1f)
             {
                 newAnimation = "Player_Jump";
             }
@@ -274,7 +499,7 @@ public class Player : MonoBehaviour
     {
         if (currentAnimation == newAnimation)
         {
-            // Якщо зараз триває падіння і налаштування змінюються під час гри, оновлюємо хітбокс
+            // If currently falling and settings change during play mode, update hitbox
             if (currentAnimation == "Player_fall" && adjustHitboxOnFall && playerCollider != null)
             {
                 if (playerCollider.size != fallColliderSize || playerCollider.offset != fallColliderOffset)
@@ -348,13 +573,22 @@ public class Player : MonoBehaviour
 
     private void OnDrawGizmosSelected()
     {
-        if (!adjustHitboxOnFall) return;
+        if (adjustHitboxOnFall)
+        {
+            // Draw fall hitbox outline in cyan when player is selected in editor
+            Gizmos.color = new Color(0f, 0.8f, 1f, 0.75f);
+            float flipSign = transform.localScale.x >= 0 ? 1f : -1f;
+            Vector3 center = transform.position + new Vector3(fallColliderOffset.x * flipSign, fallColliderOffset.y, 0f);
+            Gizmos.DrawWireCube(center, new Vector3(fallColliderSize.x, fallColliderSize.y, 0.1f));
+        }
 
-        // Показуємо контур хітбокса падіння блакитним кольором при виборі гравця в редакторі
-        Gizmos.color = new Color(0f, 0.8f, 1f, 0.75f);
-        float flipSign = transform.localScale.x >= 0 ? 1f : -1f;
-        Vector3 center = transform.position + new Vector3(fallColliderOffset.x * flipSign, fallColliderOffset.y, 0f);
-        Gizmos.DrawWireCube(center, new Vector3(fallColliderSize.x, fallColliderSize.y, 0.1f));
+        if (playerCollider != null)
+        {
+            Gizmos.color = isOnSlope ? Color.yellow : (isGrounded ? Color.green : Color.red);
+            Bounds b = playerCollider.bounds;
+            Vector3 boxCenter = b.center + Vector3.down * (slopeCheckDistance * 0.5f);
+            Gizmos.DrawWireCube(boxCenter, new Vector3(b.size.x * 0.85f, b.size.y + slopeCheckDistance, 0.1f));
+        }
     }
     
     private void OnCollisionEnter2D(Collision2D collision)

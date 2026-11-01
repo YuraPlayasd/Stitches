@@ -1,7 +1,22 @@
+using System.Collections;
 using UnityEngine;
+
+public enum EnemyType
+{
+    Zombie,
+    Skeleton,
+    Spirit,
+    Custom
+}
 
 public class Enemy : MonoBehaviour
 {
+    [Header("Enemy Type & Health")]
+    public EnemyType enemyType = EnemyType.Zombie;
+    [Tooltip("Health points: Zombie=1 (1 arrow), Skeleton=2 (2 arrows), Spirit=3 (3 arrows)")]
+    public int health = 1;
+    public int maxHealth = 1;
+
     [Header("Movement Speeds")]
     public float patrolSpeed = 2f;
     public float chaseSpeed = 3.5f;
@@ -14,7 +29,19 @@ public class Enemy : MonoBehaviour
     public Transform targetPlayer;
     public float detectionRadius = 5f;
 
+    [Header("Death Animation")]
+    public float deathDuration = 0.65f;
+
     private SpriteRenderer spriteRenderer;
+    private Animator animator;
+    private Collider2D enemyCollider;
+    private Rigidbody2D rb;
+    private bool isDead = false;
+
+    void Awake()
+    {
+        InitializeHealth();
+    }
 
     void Start()
     {
@@ -23,10 +50,73 @@ public class Enemy : MonoBehaviour
         {
             spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         }
+
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = Color.white;
+        }
+
+        animator = GetComponent<Animator>();
+        if (animator == null)
+        {
+            animator = GetComponentInChildren<Animator>();
+        }
+        if (animator == null)
+        {
+            animator = gameObject.AddComponent<Animator>();
+        }
+
+        if (animator.runtimeAnimatorController == null)
+        {
+            string ctrlName = enemyType == EnemyType.Zombie ? "Zombie" :
+                              enemyType == EnemyType.Skeleton ? "Sceleton" : "Spirit";
+            RuntimeAnimatorController ctrl = Resources.Load<RuntimeAnimatorController>("EnemyControllers/" + ctrlName);
+            if (ctrl != null)
+            {
+                animator.runtimeAnimatorController = ctrl;
+            }
+        }
+
+        enemyCollider = GetComponent<Collider2D>();
+        rb = GetComponent<Rigidbody2D>();
+
+        if (targetPlayer == null)
+        {
+            GameObject p = GameObject.FindWithTag("Player");
+            if (p != null) targetPlayer = p.transform;
+        }
+    }
+
+    private void OnValidate()
+    {
+        InitializeHealth();
+    }
+
+    private void InitializeHealth()
+    {
+        if (enemyType == EnemyType.Zombie)
+        {
+            maxHealth = 1;
+        }
+        else if (enemyType == EnemyType.Skeleton)
+        {
+            maxHealth = 2;
+        }
+        else if (enemyType == EnemyType.Spirit)
+        {
+            maxHealth = 3;
+        }
+
+        if (health <= 0 || health > maxHealth)
+        {
+            health = maxHealth;
+        }
     }
 
     void Update()
     {
+        if (isDead) return;
+
         if (targetPlayer != null && Vector2.Distance(transform.position, targetPlayer.position) <= detectionRadius)
         {
             ChasePlayer();
@@ -37,13 +127,64 @@ public class Enemy : MonoBehaviour
         }
     }
 
+    public void TakeDamage(int damage)
+    {
+        if (isDead) return;
+
+        health -= damage;
+        StartCoroutine(BlinkRed());
+
+        if (health <= 0)
+        {
+            Die();
+        }
+    }
+
+    private void Die()
+    {
+        isDead = true;
+
+        if (enemyCollider != null)
+        {
+            enemyCollider.enabled = false;
+        }
+
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.bodyType = RigidbodyType2D.Kinematic;
+        }
+
+        if (animator != null)
+        {
+            animator.SetTrigger("Die");
+            animator.Play("Death");
+        }
+
+        Destroy(gameObject, deathDuration);
+    }
+
+    private IEnumerator BlinkRed()
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = Color.red;
+            yield return new WaitForSeconds(0.12f);
+            if (spriteRenderer != null)
+            {
+                spriteRenderer.color = Color.white;
+            }
+        }
+    }
+
     private void Patrol()
     {
         if (waypoints == null || waypoints.Length == 0) return;
 
         Transform targetPoint = waypoints[currentPointIndex];
+        if (targetPoint == null) return;
 
-        // Перевіряємо відстань суто по осі X
+        // Check distance purely along X axis
         float distanceX = Mathf.Abs(transform.position.x - targetPoint.position.x);
 
         if (distanceX < 0.2f)
@@ -54,6 +195,7 @@ public class Enemy : MonoBehaviour
                 currentPointIndex = 0;
             }
             targetPoint = waypoints[currentPointIndex];
+            if (targetPoint == null) return;
         }
 
         Vector2 targetPosition = new Vector2(targetPoint.position.x, transform.position.y);
@@ -64,6 +206,8 @@ public class Enemy : MonoBehaviour
 
     private void ChasePlayer()
     {
+        if (targetPlayer == null) return;
+
         Vector2 targetPosition = new Vector2(targetPlayer.position.x, transform.position.y);
         transform.position = Vector2.MoveTowards(transform.position, targetPosition, chaseSpeed * Time.deltaTime);
         FlipSprite(targetPlayer.position.x);

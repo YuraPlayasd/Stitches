@@ -39,7 +39,7 @@ public class Door : MonoBehaviour
 
     void Update()
     {
-        // Перевіряємо, чи гравець біля дверей і чи натиснута клавіша E
+        // Check if player is near door and interact key pressed
         if (isPlayerNear && Input.GetKeyDown(interactKey))
         {
             EnterLevel();
