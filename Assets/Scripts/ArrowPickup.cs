@@ -43,6 +43,19 @@ public class ArrowPickup : MonoBehaviour
         if (col != null)
         {
             col.isTrigger = true;
+
+            // Ensure collisions with player are active
+            GameObject playerObj = GameObject.FindWithTag("Player");
+            if (playerObj != null)
+            {
+                foreach (var pCol in playerObj.GetComponentsInChildren<Collider2D>())
+                {
+                    if (pCol != null)
+                    {
+                        Physics2D.IgnoreCollision(col, pCol, false);
+                    }
+                }
+            }
         }
 
         rb = GetComponent<Rigidbody2D>();
@@ -74,6 +87,18 @@ public class ArrowPickup : MonoBehaviour
     private void Update()
     {
         if (isCollected) return;
+
+        // Proximity collection backup check
+        Player player = Object.FindAnyObjectByType<Player>();
+        if (player != null)
+        {
+            float dist = Vector2.Distance(transform.position, player.transform.position);
+            if (dist < 1.35f)
+            {
+                TryCollect(player.gameObject);
+                return;
+            }
+        }
 
         if (hasLanded && enableBobbing)
         {

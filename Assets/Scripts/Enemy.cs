@@ -27,7 +27,10 @@ public class Enemy : MonoBehaviour
 
     [Header("Target Tracking")]
     public Transform targetPlayer;
+    [Tooltip("Horizontal sight range to detect the player")]
     public float detectionRadius = 5f;
+    [Tooltip("Maximum vertical height difference to detect the player (sight is constrained horizontally)")]
+    public float maxVerticalDistance = 1.8f;
 
     [Header("Death Animation")]
     public float deathDuration = 0.65f;
@@ -137,7 +140,7 @@ public class Enemy : MonoBehaviour
     {
         if (isDead) return;
 
-        if (targetPlayer != null && Vector2.Distance(transform.position, targetPlayer.position) <= detectionRadius)
+        if (CanSeePlayer())
         {
             ChasePlayer();
         }
@@ -145,6 +148,17 @@ public class Enemy : MonoBehaviour
         {
             Patrol();
         }
+    }
+
+    private bool CanSeePlayer()
+    {
+        if (targetPlayer == null) return false;
+
+        float dx = Mathf.Abs(transform.position.x - targetPlayer.position.x);
+        float dy = Mathf.Abs(transform.position.y - targetPlayer.position.y);
+
+        // Mobs see only horizontally (within detectionRadius along X, and roughly on the same floor level along Y)
+        return dx <= detectionRadius && dy <= maxVerticalDistance;
     }
 
     public void TakeDamage(int damage)
@@ -280,6 +294,6 @@ public class Enemy : MonoBehaviour
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, detectionRadius);
+        Gizmos.DrawWireCube(transform.position, new Vector3(detectionRadius * 2f, maxVerticalDistance * 2f, 0.1f));
     }
 }

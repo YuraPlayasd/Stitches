@@ -33,7 +33,9 @@ public static class BodyPartsTracker
         return sceneName.IndexOf("LevelHub", StringComparison.OrdinalIgnoreCase) >= 0 ||
                sceneName.IndexOf("Level_Hub", StringComparison.OrdinalIgnoreCase) >= 0 ||
                sceneName.IndexOf("Level 2", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               sceneName.IndexOf("Level2", StringComparison.OrdinalIgnoreCase) >= 0;
+               sceneName.IndexOf("Level2", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               sceneName.IndexOf("Level 3", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               sceneName.IndexOf("Level3", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]

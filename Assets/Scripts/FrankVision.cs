@@ -228,14 +228,19 @@ public class FrankVision : MonoBehaviour
                 // Must be within camera view reach
                 if (!IsInCameraView(item.transform.position)) continue;
 
-                string id = "BodyPart_" + item.itemType + "_" + item.name + "_" + item.transform.position;
+                // Use persistent InstanceID so bobbing does not change the ID every frame
+                string id = "BodyPart_" + item.itemType + "_" + item.gameObject.name;
                 if (seenObjects.Contains(id)) continue;
 
-                // React to body parts
+                string typeKey = "SeenType_" + item.itemType;
+                if (seenObjects.Contains(typeKey)) continue;
+
+                // React to body parts once per scene
                 string line = GetBodyPartPhrase(item.itemType, item.itemName);
                 if (!string.IsNullOrEmpty(line))
                 {
                     seenObjects.Add(id);
+                    seenObjects.Add(typeKey);
                     Speak(line, FrankDialoguePriority.BodyPart);
                     return;
                 }
@@ -322,6 +327,11 @@ public class FrankVision : MonoBehaviour
         if (string.IsNullOrEmpty(sceneName)) return;
         if (announcedScenes.Contains(sceneName)) return;
 
+        if (BodyPartsTracker.IsHubOrLevel2(sceneName))
+        {
+            BodyPartsTracker.SetHasHead(true);
+        }
+
         // If Frank's head is not yet collected in this scene, we wait until it is picked up
         if (!BodyPartsTracker.HasHead) return;
 
@@ -346,7 +356,7 @@ public class FrankVision : MonoBehaviour
             case CollectibleType.FrankArm:
                 return "Look, Doctor! That's my arm over there! Quick, let's pick it up!";
             case CollectibleType.FrankLeg:
-                return "Aha! There's my leg lying right there! Let's go grab it!";
+                return "My legs! Doctor, look, those are my legs! Finally, I can stand on my own two feet again! Let's pick them up!";
             case CollectibleType.FrankTorso:
                 return "Doctor! My torso is right ahead! We have to get it back!";
             default:
@@ -369,9 +379,9 @@ public class FrankVision : MonoBehaviour
         {
             return "This is the castle hub! It is cold and dangerous here, but I can clearly sense one of my parts nearby!";
         }
-        else if (lower.Contains("lab"))
+        else if (lower.Contains("level 3") || lower.Contains("level3") || lower.Contains("lab"))
         {
-            return "The laboratory! My creator's sanctuary! I can feel the energy of my missing part in this room!";
+            return "So this is the laboratory... To think you actually conduct such gruesome experiments here in cold blood... It sends shivers down my non-existent spine!";
         }
         return null;
     }
@@ -678,7 +688,7 @@ public class FrankVision : MonoBehaviour
         if (hasSpawnedLevel2Arrows) return;
 
         // Check if arrows already exist in the scene (placed manually by user in Scene view)
-        ArrowPickup[] existingPickups = Object.FindObjectsByType<ArrowPickup>(FindObjectsSortMode.None);
+        ArrowPickup[] existingPickups = Object.FindObjectsByType<ArrowPickup>();
         if (existingPickups != null && existingPickups.Length >= 3)
         {
             hasSpawnedLevel2Arrows = true;

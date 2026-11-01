@@ -13,7 +13,8 @@ public class LevelAmbientMusic : MonoBehaviour
     public AudioClip level1AmbientClip;
     public AudioClip level2AmbientClip;
     [Range(0f, 1f)]
-    public float ambientVolume = 0.75f;
+    [Tooltip("Ambient background music volume - kept softer than footsteps")]
+    public float ambientVolume = 0.28f;
 
     private AudioSource audioSource;
 

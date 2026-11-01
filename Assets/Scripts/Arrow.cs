@@ -105,7 +105,7 @@ public class Arrow : MonoBehaviour
         }
 
         // Ignore collisions with other arrows
-        Arrow[] otherArrows = Object.FindObjectsByType<Arrow>(FindObjectsSortMode.None);
+        Arrow[] otherArrows = Object.FindObjectsByType<Arrow>();
         if (col != null)
         {
             foreach (var other in otherArrows)
@@ -322,8 +322,21 @@ public class Arrow : MonoBehaviour
             col.isTrigger = true;
             if (col is BoxCollider2D box)
             {
-                box.size = new Vector2(0.5f, 1.4f);
+                box.size = new Vector2(0.8f, 1.6f);
                 box.offset = Vector2.zero;
+            }
+
+            // Re-enable collisions with player so dropped arrow can be picked up
+            GameObject playerObj = GameObject.FindWithTag("Player");
+            if (playerObj != null)
+            {
+                foreach (var pCol in playerObj.GetComponentsInChildren<Collider2D>())
+                {
+                    if (pCol != null)
+                    {
+                        Physics2D.IgnoreCollision(col, pCol, false);
+                    }
+                }
             }
         }
 

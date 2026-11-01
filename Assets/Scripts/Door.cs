@@ -30,6 +30,15 @@ public class Door : MonoBehaviour
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
 
+        if (promptUI == null)
+        {
+            GameObject dt = GameObject.Find("DoorText");
+            if (dt != null)
+            {
+                promptUI = dt;
+            }
+        }
+
         // Hide prompt at start
         if (promptUI != null)
         {
@@ -74,6 +83,12 @@ public class Door : MonoBehaviour
 
     private void EnterLevel()
     {
+        // Save player arrow count for carrying over between levels
+        Player player = Object.FindAnyObjectByType<Player>();
+        if (player != null)
+        {
+            Player.SaveArrowsCount(player.arrowsCount);
+        }
         if (openDoorSprite != null && spriteRenderer != null)
         {
             spriteRenderer.sprite = openDoorSprite;

@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections; 
 using UnityEngine.SceneManagement; 
 using UnityEngine.UI;
+using UnityEngine.Tilemaps;
 
 public class Player : MonoBehaviour
 {
@@ -20,7 +21,12 @@ public class Player : MonoBehaviour
     public AudioClip walkLevel1Clip;
     public AudioClip walkLevel2Clip;
     [Range(0f, 1f)]
-    public float walkAudioVolume = 0.85f;
+    [Tooltip("Footstep and landing audio volume - louder than ambient music")]
+    public float walkAudioVolume = 1.0f;
+
+    private AudioSource landingAudioSource;
+    private Coroutine stopLandingRoutine;
+    private float airTime = 0f;
     private AudioSource walkAudioSource;
     private bool isWalkAudioPaused = false;
     public Transform GroundChek;
@@ -47,6 +53,13 @@ public class Player : MonoBehaviour
     public float arrowCooldown = 0.5f;
     [Tooltip("Number of arrows remaining")]
     public int arrowsCount = 0;
+
+    public static int CarriedArrowsCount { get; set; } = -1;
+
+    public static void SaveArrowsCount(int count)
+    {
+        CarriedArrowsCount = count;
+    }
     public TMPro.TextMeshProUGUI arrowCountText;
 
     [Header("Jump / Fall Feel")]
@@ -90,8 +103,21 @@ public class Player : MonoBehaviour
 
     void Awake()
     {
-        arrowsCount = 0;
+        string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        if (currentScene.IndexOf("Level 3", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            currentScene.IndexOf("Level3", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            if (CarriedArrowsCount >= 0)
+            {
+                arrowsCount = CarriedArrowsCount;
+            }
+        }
+        else
+        {
+            arrowsCount = 0;
+        }
         CacheDefaultCollider();
+        EnsureTilemapCompositeColliders();
         AutoFindHealthImage();
     }
 
@@ -101,6 +127,7 @@ public class Player : MonoBehaviour
         if (rb != null)
         {
             rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
         }
         animator = GetComponent<Animator>();
         extraJumps = extraJumpesValue;
@@ -111,6 +138,7 @@ public class Player : MonoBehaviour
         }
 
         CacheDefaultCollider();
+        EnsureTilemapCompositeColliders();
 
         AutoFindHealthImage();
         UpdateHealthUI();
@@ -121,8 +149,23 @@ public class Player : MonoBehaviour
             BodyPartsTracker.SetHasHead(true);
         }
 
-        // Always start with 0 arrows on both Level 1 and Level 2
-        arrowsCount = 0;
+        // Enforce 0 arrows on Level 1 & 2; restore carried arrows on Level 3
+        string activeSceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        if (activeSceneName.IndexOf("Level 3", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            activeSceneName.IndexOf("Level3", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            if (CarriedArrowsCount >= 0)
+            {
+                arrowsCount = CarriedArrowsCount;
+            }
+        }
+        else if (activeSceneName.IndexOf("Level 1", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 activeSceneName.IndexOf("Level1", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 activeSceneName.IndexOf("Level 2", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 activeSceneName.IndexOf("Level2", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            arrowsCount = 0;
+        }
 
         EnsureArrowPrefab();
         AutoFindArrowCountUI();
@@ -430,41 +473,63 @@ public class Player : MonoBehaviour
 
             if (foundHit)
             {
-                // To determine ground normal without catching on tile seams, cast downward from player center
-                RaycastHit2D centerHit = Physics2D.Raycast(new Vector2(bounds.center.x, bounds.min.y + 0.15f), Vector2.down, slopeCheckDistance + 0.2f, groundLayer);
+                float distanceToGround = Mathf.Max(0f, validHit.distance - (bounds.extents.y - 0.05f));
+
+                // Sample multiple raycasts downward across player width to accurately determine ground normal
+                // (prevents seam artifacts where a BoxCast hitting a tile corner returns a diagonal normal)
+                float rayY = bounds.min.y + 0.2f;
+                float rayDist = slopeCheckDistance + 0.3f;
+                float halfWidth = bounds.extents.x * 0.45f;
+
+                RaycastHit2D centerHit = Physics2D.Raycast(new Vector2(bounds.center.x, rayY), Vector2.down, rayDist, groundLayer);
+                RaycastHit2D leftHit = Physics2D.Raycast(new Vector2(bounds.center.x - halfWidth, rayY), Vector2.down, rayDist, groundLayer);
+                RaycastHit2D rightHit = Physics2D.Raycast(new Vector2(bounds.center.x + halfWidth, rayY), Vector2.down, rayDist, groundLayer);
+
                 Vector2 normal = Vector2.up;
-                if (centerHit.collider != null && centerHit.collider != playerCollider && (dropThroughTimer <= 0f || centerHit.collider != currentOneWayPlatform))
+
+                // If any downward ray detects a flat surface, prioritize flat ground to prevent seam stutter
+                if (IsFlatSurface(centerHit) || IsFlatSurface(leftHit) || IsFlatSurface(rightHit))
+                {
+                    normal = Vector2.up;
+                }
+                else if (IsValidGroundHit(centerHit))
                 {
                     normal = centerHit.normal;
                 }
-                else
+                else if (IsValidGroundHit(leftHit))
                 {
-                    normal = validHit.normal;
+                    normal = leftHit.normal;
+                }
+                else if (IsValidGroundHit(rightHit))
+                {
+                    normal = rightHit.normal;
+                }
+                else if (validHit.normal.y > 0.4f && Vector2.Angle(validHit.normal, Vector2.up) < minSlopeAngle)
+                {
+                    normal = Vector2.up;
                 }
 
                 float hitAngle = Vector2.Angle(normal, Vector2.up);
 
-                if (hitAngle <= maxSlopeAngle)
+                if (hitAngle <= maxSlopeAngle && normal.y > 0.3f)
                 {
-                    float distanceToGround = Mathf.Max(0f, validHit.distance - (bounds.extents.y - 0.05f));
                     float allowedDistance = hitAngle >= minSlopeAngle ? slopeCheckDistance : 0.2f;
 
                     if (distanceToGround <= allowedDistance)
                     {
                         grounded = true;
 
-                        // Only activate slope physics if the surface angle is significantly sloped
-                        // Surfaces below minSlopeAngle (0-5 deg) are treated as pure flat ground to prevent seam stutter
+                        // Only activate slope physics if the surface is genuinely sloped
                         if (hitAngle >= minSlopeAngle)
                         {
                             isOnSlope = true;
                             slopeNormal = normal;
                             slopeAngle = hitAngle;
 
-                            // Downward slope snapping ONLY on actual slopes during descent
-                            if (!isJumping && distanceToGround > 0.02f && distanceToGround <= 0.35f && rb != null && rb.linearVelocity.y <= 0.1f)
+                            // Downward slope snapping ONLY when actively descending on a confirmed slope
+                            if (!isJumping && Mathf.Abs(moveInput) > 0.01f && distanceToGround > 0.04f && distanceToGround <= 0.3f && rb != null && rb.linearVelocity.y <= 0.1f)
                             {
-                                rb.position += Vector2.down * (distanceToGround - 0.005f);
+                                rb.position += Vector2.down * (distanceToGround - 0.01f);
                             }
                         }
                     }
@@ -474,8 +539,18 @@ public class Player : MonoBehaviour
 
         isGrounded = grounded;
 
-        if (isGrounded && jumpCooldownTimer <= 0f)
+        if (!isGrounded)
         {
+            airTime += Time.fixedDeltaTime;
+        }
+        else
+        {
+            // Landing after being in the air from a jump or drop
+            if (airTime >= 0.12f && jumpCooldownTimer <= 0f)
+            {
+                PlayLandingSound();
+            }
+            airTime = 0f;
             isJumping = false;
         }
     }
@@ -508,9 +583,9 @@ public class Player : MonoBehaviour
         {
             // Flat ground or airborne
             float yVel = rb.linearVelocity.y;
-            if (isGrounded && yVel < 0f && yVel > -1.5f)
+            if (isGrounded && yVel < 0.05f && yVel > -2f)
             {
-                // Zero out micro-downward velocity on flat ground so player doesn't push into floor seams
+                // Zero out micro-downward velocity on flat ground so player doesn't push into floor seams or jitter
                 yVel = 0f;
             }
             rb.linearVelocity = new Vector2(moveInput * moveSpeed, yVel);
@@ -543,7 +618,12 @@ public class Player : MonoBehaviour
         }
         else
         {
-            if (rb != null && rb.linearVelocityY > 0.1f)
+            // Coyote time / micro-separation grace while running horizontally
+            if (!isJumping && airTime < 0.12f && Mathf.Abs(moveInput) > 0.01f && rb != null && rb.linearVelocity.y >= -1.5f)
+            {
+                newAnimation = "Player_run";
+            }
+            else if (rb != null && rb.linearVelocityY > 0.1f)
             {
                 newAnimation = "Player_Jump";
             }
@@ -634,8 +714,11 @@ public class Player : MonoBehaviour
 
         if (adjustHitboxOnFall && animName == "Player_fall")
         {
+            // Align bottom with default collider so bottom never dips below or shifts into the floor!
+            float defaultBottom = defaultColliderOffset.y - defaultColliderSize.y * 0.5f;
+            Vector2 alignedOffset = new Vector2(fallColliderOffset.x, defaultBottom + fallColliderSize.y * 0.5f);
             playerCollider.size = fallColliderSize;
-            playerCollider.offset = fallColliderOffset;
+            playerCollider.offset = alignedOffset;
         }
         else
         {
@@ -958,6 +1041,7 @@ public class Player : MonoBehaviour
 
     private void OnSceneLoadedForWalkAudio(Scene scene, LoadSceneMode mode)
     {
+        EnsureTilemapCompositeColliders();
         SetupWalkAudio();
     }
 
@@ -1018,5 +1102,90 @@ public class Player : MonoBehaviour
                 isWalkAudioPaused = true;
             }
         }
+    }
+
+    private void EnsureLandingAudio()
+    {
+        if (landingAudioSource != null) return;
+
+        Transform child = transform.Find("PlayerLandingAudio");
+        if (child == null)
+        {
+            GameObject obj = new GameObject("PlayerLandingAudio");
+            obj.transform.SetParent(transform, false);
+            child = obj.transform;
+        }
+
+        landingAudioSource = child.GetComponent<AudioSource>();
+        if (landingAudioSource == null)
+        {
+            landingAudioSource = child.gameObject.AddComponent<AudioSource>();
+        }
+
+        landingAudioSource.loop = false;
+        landingAudioSource.playOnAwake = false;
+        landingAudioSource.spatialBlend = 0f;
+    }
+
+    private void PlayLandingSound()
+    {
+        if (health <= 0) return;
+
+        string currentScene = SceneManager.GetActiveScene().name;
+        AudioClip clip = IsLevel1Scene(currentScene) ? walkLevel1Clip : walkLevel2Clip;
+        if (clip == null) return;
+
+        EnsureLandingAudio();
+        if (landingAudioSource != null)
+        {
+            landingAudioSource.clip = clip;
+            // Play from roughly the middle of the walking audio file for the current location
+            landingAudioSource.time = Mathf.Clamp(clip.length * 0.48f, 0f, clip.length - 0.1f);
+            landingAudioSource.volume = walkAudioVolume;
+            landingAudioSource.Play();
+
+            if (stopLandingRoutine != null)
+            {
+                StopCoroutine(stopLandingRoutine);
+            }
+            stopLandingRoutine = StartCoroutine(StopLandingSoundAfter(0.32f));
+        }
+    }
+
+    private IEnumerator StopLandingSoundAfter(float duration)
+    {
+        yield return new WaitForSeconds(duration);
+        if (landingAudioSource != null && landingAudioSource.isPlaying)
+        {
+            landingAudioSource.Stop();
+        }
+        stopLandingRoutine = null;
+    }
+
+    public static void EnsureTilemapCompositeColliders()
+    {
+        TilemapCollider2D[] tilemapColliders = Object.FindObjectsByType<TilemapCollider2D>();
+        foreach (var tc in tilemapColliders)
+        {
+            CompositeCollider2D comp = tc.GetComponent<CompositeCollider2D>();
+            if (comp != null)
+            {
+                if (tc.compositeOperation != Collider2D.CompositeOperation.Merge)
+                {
+                    tc.compositeOperation = Collider2D.CompositeOperation.Merge;
+                    comp.GenerateGeometry();
+                }
+            }
+        }
+    }
+
+    private bool IsValidGroundHit(RaycastHit2D hit)
+    {
+        return hit.collider != null && hit.collider != playerCollider && hit.normal.y > 0.3f && (dropThroughTimer <= 0f || hit.collider != currentOneWayPlatform);
+    }
+
+    private bool IsFlatSurface(RaycastHit2D hit)
+    {
+        return IsValidGroundHit(hit) && Vector2.Angle(hit.normal, Vector2.up) < minSlopeAngle;
     }
 }
