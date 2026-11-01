@@ -149,6 +149,7 @@ public class Player : MonoBehaviour
         EnsureTilemapCompositeColliders();
 
         AutoFindHealthImage();
+        health = maxHealth;
         UpdateHealthUI();
 
         string sceneName = SceneManager.GetActiveScene().name;

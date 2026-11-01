@@ -54,6 +54,7 @@ public class Enemy : MonoBehaviour
     private Collider2D[] myColliders;
     private Rigidbody2D rb;
     private bool isDead = false;
+    public bool IsDead => isDead;
 
     // Static registry so enemies can pass through each other without collision
     private static readonly HashSet<Collider2D> allEnemyColliders = new HashSet<Collider2D>();

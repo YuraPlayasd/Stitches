@@ -56,10 +56,18 @@ public class FrankVision : MonoBehaviour
     [TextArea(2, 4)]
     public string firstArrowPickupText = "Aha! You can throw these arrows by pressing [F]! I'll count how many we have in the top right corner!";
 
+    [Header("Level 3 Story Dialogues")]
+    [TextArea(2, 4)]
+    public string level3OfficeStartText = "This is the office... I sense my final body part nearby! Doctor, save your arrows — I feel a terrible danger lurking ahead!";
+    [TextArea(2, 4)]
+    public string level3LabTubesReactionText = "Doctor... what are these horrors?! Look at those test tubes! Humanoids floating inside... gruesome, unnatural experiments! How could you do something so monstrous?!";
+
     private static bool hasWarnedNoArrowsInLevel2 = false;
     private static bool hasExplainedArrows = false;
+    private static bool hasSpokenLevel3TubesReaction = false;
     private float level2PlayerStartX = float.NaN;
     private bool isLevel2Scene = false;
+    private bool isLevel3Scene = false;
     private bool hasSpawnedLevel2Arrows = false;
 
     private static bool hasWarnedAboutSpikes = false;
@@ -86,7 +94,7 @@ public class FrankVision : MonoBehaviour
         Instance = this;
 
         string activeScene = SceneManager.GetActiveScene().name;
-        InitLevel2Tutorial(activeScene);
+        InitSceneContext(activeScene);
     }
 
     private void Update()
@@ -106,7 +114,7 @@ public class FrankVision : MonoBehaviour
         string activeScene = SceneManager.GetActiveScene().name;
         // Check if starting directly in a new scene with Frank's head already collected
         CheckLocationAnnouncement(activeScene);
-        InitLevel2Tutorial(activeScene);
+        InitSceneContext(activeScene);
     }
 
     void OnDisable()
@@ -125,7 +133,7 @@ public class FrankVision : MonoBehaviour
     {
         FindOrBuildDialogueUI();
         CheckLocationAnnouncement(scene.name);
-        InitLevel2Tutorial(scene.name);
+        InitSceneContext(scene.name);
     }
 
     /// <summary>
@@ -186,6 +194,9 @@ public class FrankVision : MonoBehaviour
 
             // Check Level 2 arrow tutorial warning
             CheckLevel2NoArrowsWarning();
+
+            // Check Level 3 tubes reaction near left patrol point
+            CheckLevel3LeftPatrolPointReaction();
         }
     }
 
@@ -256,6 +267,15 @@ public class FrankVision : MonoBehaviour
     {
         if (!BodyPartsTracker.HasHead) return;
         if (hasWarnedAboutSpikes) return;
+
+        // User requested: Remove spike warning from Level 2 and Level 3! Only active in Level 1.
+        string activeSceneName = SceneManager.GetActiveScene().name.ToLowerInvariant();
+        if (activeSceneName.Contains("level 2") || activeSceneName.Contains("level2") ||
+            activeSceneName.Contains("level 3") || activeSceneName.Contains("level3") ||
+            activeSceneName.Contains("hub"))
+        {
+            return;
+        }
 
         // 1. Check direct nearby colliders tagged or named Damage / Spike
         Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, spikeWarningDistance);
@@ -381,7 +401,7 @@ public class FrankVision : MonoBehaviour
         }
         else if (lower.Contains("level 3") || lower.Contains("level3") || lower.Contains("lab"))
         {
-            return "So this is the laboratory... To think you actually conduct such gruesome experiments here in cold blood... It sends shivers down my non-existent spine!";
+            return level3OfficeStartText;
         }
         return null;
     }
@@ -390,7 +410,7 @@ public class FrankVision : MonoBehaviour
     /// Displays a speech line in the dialogue panel with priority control and typewriter effect.
     /// Low-priority warnings will wait in queue if higher-priority story or body part lines are active.
     /// </summary>
-    public void Speak(string message, FrankDialoguePriority priority = FrankDialoguePriority.Story, float duration = -1f)
+    public void Speak(string message, FrankDialoguePriority priority = FrankDialoguePriority.Story, float duration = -1f, string customSpeakerName = null)
     {
         if (string.IsNullOrEmpty(message)) return;
 
@@ -424,7 +444,7 @@ public class FrankVision : MonoBehaviour
         }
 
         currentPriority = priority;
-        speechCoroutine = StartCoroutine(ShowSpeechRoutine(message, duration > 0 ? duration : defaultSpeechDuration));
+        speechCoroutine = StartCoroutine(ShowSpeechRoutine(message, duration > 0 ? duration : defaultSpeechDuration, customSpeakerName));
     }
 
     private void EnsureYapingAudio()
@@ -483,7 +503,7 @@ public class FrankVision : MonoBehaviour
         }
     }
 
-    private IEnumerator ShowSpeechRoutine(string message, float duration)
+    private IEnumerator ShowSpeechRoutine(string message, float duration, string customSpeakerName = null)
     {
         isSpeaking = true;
 
@@ -494,7 +514,7 @@ public class FrankVision : MonoBehaviour
 
         if (speakerNameText != null)
         {
-            speakerNameText.text = speakerName;
+            speakerNameText.text = !string.IsNullOrEmpty(customSpeakerName) ? customSpeakerName : speakerName;
         }
 
         if (dialogueText != null)
@@ -658,12 +678,17 @@ public class FrankVision : MonoBehaviour
         dialoguePanel.SetActive(false);
     }
 
-    private void InitLevel2Tutorial(string sceneName)
+    private void InitSceneContext(string sceneName)
     {
-        isLevel2Scene = BodyPartsTracker.IsHubOrLevel2(sceneName);
+        string lower = sceneName.ToLowerInvariant();
+        // Warning about danger ahead and needing to go left is ONLY for Level 2!
+        isLevel2Scene = (lower.Contains("level 2") || lower.Contains("level2") || lower.Contains("hub")) &&
+                        !lower.Contains("level 3") && !lower.Contains("level3") &&
+                        !lower.Contains("level 1") && !lower.Contains("level1");
+        isLevel3Scene = lower.Contains("level 3") || lower.Contains("level3");
+
         if (isLevel2Scene)
         {
-            // In Level 2, Frank's head is always with the player
             BodyPartsTracker.SetHasHead(true);
             hasWarnedNoArrowsInLevel2 = false;
             hasExplainedArrows = false;
@@ -680,6 +705,32 @@ public class FrankVision : MonoBehaviour
             }
 
             SpawnLevel2TutorialArrows();
+        }
+        else if (isLevel3Scene)
+        {
+            BodyPartsTracker.SetHasHead(true);
+            hasSpokenLevel3TubesReaction = false;
+        }
+    }
+
+    private void CheckLevel3LeftPatrolPointReaction()
+    {
+        if (!isLevel3Scene || hasSpokenLevel3TubesReaction) return;
+        if (!BodyPartsTracker.HasHead) return;
+
+        Player player = GetComponent<Player>();
+        if (player == null) player = Object.FindAnyObjectByType<Player>();
+        if (player == null) return;
+
+        // In Level 3, the left mob patrol point is Point1_Patrol around (111.0, 25.39)
+        GameObject leftPointGo = GameObject.Find("Point1_Patrol");
+        Vector3 checkPos = leftPointGo != null ? leftPointGo.transform.position : new Vector3(111.0f, 25.39f, 0f);
+
+        float dist = Vector2.Distance(player.transform.position, checkPos);
+        if (dist <= 6.5f || (player.transform.position.x >= 106.0f && player.transform.position.x <= 118.0f && player.transform.position.y > 18.0f))
+        {
+            hasSpokenLevel3TubesReaction = true;
+            Speak(level3LabTubesReactionText, FrankDialoguePriority.Story, 6.0f);
         }
     }
 

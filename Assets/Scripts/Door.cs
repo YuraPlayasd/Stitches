@@ -87,6 +87,8 @@ public class Door : MonoBehaviour
         Player player = Object.FindAnyObjectByType<Player>();
         if (player != null)
         {
+            player.health = player.maxHealth;
+            player.UpdateHealthUI();
             Player.SaveArrowsCount(player.arrowsCount);
         }
         if (openDoorSprite != null && spriteRenderer != null)
