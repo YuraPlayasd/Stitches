@@ -50,7 +50,7 @@ public class FrankVision : MonoBehaviour
 
     [Header("Level 2 Arrow Tutorial")]
     [Tooltip("Distance walked to the right from start in Level 2 before warning if player has 0 arrows")]
-    public float level2WalkDistanceForWarning = 4.0f;
+    public float level2WalkDistanceForWarning = 2.0f;
     [TextArea(2, 4)]
     public string noArrowsWarningText = "Doctor, wait! It looks dangerous ahead! We should check to the left for a way to defend ourselves!";
     [TextArea(2, 4)]
@@ -84,6 +84,17 @@ public class FrankVision : MonoBehaviour
         }
 
         Instance = this;
+
+        string activeScene = SceneManager.GetActiveScene().name;
+        InitLevel2Tutorial(activeScene);
+    }
+
+    private void Update()
+    {
+        if (BodyPartsTracker.HasHead && isLevel2Scene && !hasWarnedNoArrowsInLevel2)
+        {
+            CheckLevel2NoArrowsWarning();
+        }
     }
 
     void Start()
@@ -373,6 +384,12 @@ public class FrankVision : MonoBehaviour
     {
         if (string.IsNullOrEmpty(message)) return;
 
+        string activeScene = SceneManager.GetActiveScene().name;
+        if (BodyPartsTracker.IsHubOrLevel2(activeScene))
+        {
+            BodyPartsTracker.SetHasHead(true);
+        }
+
         // Never speak before Frank's head is picked up!
         if (!BodyPartsTracker.HasHead) return;
 
@@ -404,10 +421,15 @@ public class FrankVision : MonoBehaviour
     {
         if (yapingAudioSource == null)
         {
-            yapingAudioSource = GetComponent<AudioSource>();
+            Transform existing = transform.Find("FrankSpeechAudio");
+            GameObject speechObj = existing != null ? existing.gameObject : new GameObject("FrankSpeechAudio");
+            speechObj.transform.SetParent(transform);
+            speechObj.transform.localPosition = Vector3.zero;
+
+            yapingAudioSource = speechObj.GetComponent<AudioSource>();
             if (yapingAudioSource == null)
             {
-                yapingAudioSource = gameObject.AddComponent<AudioSource>();
+                yapingAudioSource = speechObj.AddComponent<AudioSource>();
             }
             yapingAudioSource.playOnAwake = false;
             yapingAudioSource.spatialBlend = 0f; // 2D UI sound
@@ -631,7 +653,22 @@ public class FrankVision : MonoBehaviour
         isLevel2Scene = BodyPartsTracker.IsHubOrLevel2(sceneName);
         if (isLevel2Scene)
         {
-            level2PlayerStartX = transform.position.x;
+            // In Level 2, Frank's head is always with the player
+            BodyPartsTracker.SetHasHead(true);
+            hasWarnedNoArrowsInLevel2 = false;
+            hasExplainedArrows = false;
+
+            Player player = GetComponent<Player>();
+            if (player == null) player = Object.FindAnyObjectByType<Player>();
+            if (player != null)
+            {
+                level2PlayerStartX = player.transform.position.x;
+            }
+            else
+            {
+                level2PlayerStartX = transform.position.x;
+            }
+
             SpawnLevel2TutorialArrows();
         }
     }
@@ -682,12 +719,18 @@ public class FrankVision : MonoBehaviour
         if (player == null) player = Object.FindAnyObjectByType<Player>();
         if (player == null) return;
 
-        if (player.arrowsCount == 0 && !float.IsNaN(level2PlayerStartX))
+        if (float.IsNaN(level2PlayerStartX))
+        {
+            level2PlayerStartX = player.transform.position.x;
+            return;
+        }
+
+        if (player.arrowsCount == 0)
         {
             if (player.transform.position.x > level2PlayerStartX + level2WalkDistanceForWarning)
             {
                 hasWarnedNoArrowsInLevel2 = true;
-                Speak(noArrowsWarningText, FrankDialoguePriority.Story, 5.0f);
+                Speak(noArrowsWarningText, FrankDialoguePriority.Story, 5.5f);
             }
         }
     }
@@ -701,6 +744,11 @@ public class FrankVision : MonoBehaviour
         if (!hasExplainedArrows)
         {
             hasExplainedArrows = true;
+            string sceneName = SceneManager.GetActiveScene().name;
+            if (BodyPartsTracker.IsHubOrLevel2(sceneName))
+            {
+                BodyPartsTracker.SetHasHead(true);
+            }
             Speak(firstArrowPickupText, FrankDialoguePriority.Story, 5.5f);
         }
     }

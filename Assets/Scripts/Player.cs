@@ -13,8 +13,16 @@ public class Player : MonoBehaviour
     private bool isInvulnerable = false;
 
     [Header("Movement")]
-    public float moveSpeed = 5f;
-    public float jumpforce = 10f;
+    public float moveSpeed = 6.2f;
+    public float jumpforce = 11.5f;
+
+    [Header("Footstep / Walk Audio")]
+    public AudioClip walkLevel1Clip;
+    public AudioClip walkLevel2Clip;
+    [Range(0f, 1f)]
+    public float walkAudioVolume = 0.85f;
+    private AudioSource walkAudioSource;
+    private bool isWalkAudioPaused = false;
     public Transform GroundChek;
     public float GroundChekRadius = 0.2f;
     public LayerMask groundLayer;
@@ -82,6 +90,7 @@ public class Player : MonoBehaviour
 
     void Awake()
     {
+        arrowsCount = 0;
         CacheDefaultCollider();
         AutoFindHealthImage();
     }
@@ -112,17 +121,33 @@ public class Player : MonoBehaviour
             BodyPartsTracker.SetHasHead(true);
         }
 
+        // Always start with 0 arrows on both Level 1 and Level 2
+        arrowsCount = 0;
+
         EnsureArrowPrefab();
         AutoFindArrowCountUI();
         UpdateArrowUI();
 
         IntroCutscene.EnsureCutsceneExists();
         FrankVision.EnsureExists(gameObject);
+
+        SetupWalkAudio();
+        SceneManager.sceneLoaded += OnSceneLoadedForWalkAudio;
+    }
+
+    void OnDestroy()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoadedForWalkAudio;
+        if (walkAudioSource != null && walkAudioSource.isPlaying)
+        {
+            walkAudioSource.Stop();
+        }
     }
 
     void Update()
     {
         moveInput = Input.GetAxis("Horizontal");
+        UpdateWalkAudio();
         if (Input.GetKeyDown(KeyCode.F))
         {
             Shoot();
@@ -710,9 +735,10 @@ public class Player : MonoBehaviour
         arrowsCount += amount;
         UpdateArrowUI();
 
-        if (FrankVision.Instance != null)
+        FrankVision fv = FrankVision.Instance ?? FrankVision.EnsureExists(gameObject);
+        if (fv != null)
         {
-            FrankVision.Instance.OnArrowCollected();
+            fv.OnArrowCollected();
         }
     }
 
@@ -788,6 +814,11 @@ public class Player : MonoBehaviour
 
     public void Die()
     {
+        if (walkAudioSource != null && walkAudioSource.isPlaying)
+        {
+            walkAudioSource.Stop();
+        }
+        isWalkAudioPaused = false;
         string currentScene = SceneManager.GetActiveScene().name;
         if (string.IsNullOrEmpty(currentScene))
         {
@@ -870,6 +901,121 @@ public class Player : MonoBehaviour
             if (arrowRb != null)
             {
                 arrowRb.linearVelocity = new Vector2(shootDir * 12f, 0f);
+            }
+        }
+    }
+
+    // ==========================================
+    // FOOTSTEP & WALKING AUDIO SYSTEM
+    // ==========================================
+    private void SetupWalkAudio()
+    {
+        if (walkLevel1Clip == null)
+        {
+            walkLevel1Clip = Resources.Load<AudioClip>("Audio/walk_level1");
+            if (walkLevel1Clip == null) walkLevel1Clip = Resources.Load<AudioClip>("walk_level1");
+        }
+
+        if (walkLevel2Clip == null)
+        {
+            walkLevel2Clip = Resources.Load<AudioClip>("Audio/walk_level2");
+            if (walkLevel2Clip == null) walkLevel2Clip = Resources.Load<AudioClip>("walk_level2");
+        }
+
+        if (walkAudioSource == null)
+        {
+            Transform existing = transform.Find("PlayerWalkAudio");
+            GameObject walkObj = existing != null ? existing.gameObject : new GameObject("PlayerWalkAudio");
+            walkObj.transform.SetParent(transform);
+            walkObj.transform.localPosition = Vector3.zero;
+
+            walkAudioSource = walkObj.GetComponent<AudioSource>();
+            if (walkAudioSource == null)
+            {
+                walkAudioSource = walkObj.AddComponent<AudioSource>();
+            }
+            walkAudioSource.playOnAwake = false;
+            walkAudioSource.loop = true;
+            walkAudioSource.spatialBlend = 0f; // clean 2D audio
+            walkAudioSource.volume = walkAudioVolume;
+        }
+
+        string currentScene = SceneManager.GetActiveScene().name;
+        AudioClip targetClip = IsLevel1Scene(currentScene) ? walkLevel1Clip : walkLevel2Clip;
+
+        if (walkAudioSource.clip != targetClip)
+        {
+            bool wasPlaying = walkAudioSource.isPlaying;
+            float prevTime = (walkAudioSource != null && walkAudioSource.clip != null) ? walkAudioSource.time : 0f;
+            walkAudioSource.clip = targetClip;
+            if (wasPlaying && targetClip != null)
+            {
+                walkAudioSource.time = Mathf.Clamp(prevTime, 0f, targetClip.length - 0.01f);
+                walkAudioSource.Play();
+            }
+        }
+    }
+
+    private void OnSceneLoadedForWalkAudio(Scene scene, LoadSceneMode mode)
+    {
+        SetupWalkAudio();
+    }
+
+    private bool IsLevel1Scene(string sceneName)
+    {
+        if (string.IsNullOrEmpty(sceneName)) return true;
+        string lower = sceneName.ToLowerInvariant();
+        return lower.Contains("level 1") || lower.Contains("level1") || lower.Contains("gamescene");
+    }
+
+    private void UpdateWalkAudio()
+    {
+        if (walkAudioSource == null) return;
+
+        string currentScene = SceneManager.GetActiveScene().name;
+        AudioClip targetClip = IsLevel1Scene(currentScene) ? walkLevel1Clip : walkLevel2Clip;
+        if (walkAudioSource.clip != targetClip && targetClip != null)
+        {
+            float prevTime = (walkAudioSource != null && walkAudioSource.clip != null) ? walkAudioSource.time : 0f;
+            bool wasPlaying = walkAudioSource.isPlaying;
+            walkAudioSource.clip = targetClip;
+            walkAudioSource.time = Mathf.Clamp(prevTime, 0f, targetClip.length - 0.01f);
+            if (wasPlaying) walkAudioSource.Play();
+        }
+
+        if (walkAudioSource.clip == null) return;
+
+        if (health <= 0)
+        {
+            if (walkAudioSource.isPlaying) walkAudioSource.Stop();
+            isWalkAudioPaused = false;
+            return;
+        }
+
+        // Active walking on ground or slope
+        bool isWalking = (isGrounded || (isOnSlope && !isJumping)) && Mathf.Abs(moveInput) > 0.05f && (rb == null || Mathf.Abs(rb.linearVelocity.x) > 0.1f);
+
+        if (isWalking)
+        {
+            if (!walkAudioSource.isPlaying)
+            {
+                if (isWalkAudioPaused)
+                {
+                    walkAudioSource.UnPause();
+                }
+                else
+                {
+                    walkAudioSource.Play();
+                }
+                isWalkAudioPaused = false;
+            }
+        }
+        else
+        {
+            if (walkAudioSource.isPlaying)
+            {
+                walkAudioSource.Pause();
+                isWalkAudioPaused = true;
             }
         }
     }

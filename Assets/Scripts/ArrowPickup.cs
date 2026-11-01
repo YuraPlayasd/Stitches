@@ -148,7 +148,9 @@ public class ArrowPickup : MonoBehaviour
 
         if (foundGround && bestHit.collider != null)
         {
-            LandOnGround(bestHit.point.y + 0.45f);
+            bool isSpike = IsSpikeOrPlantOrDamage(bestHit.collider, bestHit.point);
+            float offset = isSpike ? 1.25f : 1.05f;
+            LandOnGround(bestHit.point.y + offset);
         }
     }
 
@@ -196,6 +198,76 @@ public class ArrowPickup : MonoBehaviour
         }
     }
 
+    public static bool IsSpikeOrPlantOrDamage(Collider2D col, Vector3 position)
+    {
+        if (col == null) return false;
+
+        // 1. Tag checks
+        if (col.CompareTag("Damage")) return true;
+        if (col.transform.parent != null && col.transform.parent.CompareTag("Damage")) return true;
+
+        // 2. Name checks
+        string colName = col.name;
+        if (colName.IndexOf("Damage", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            colName.IndexOf("Spike", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            colName.IndexOf("Plant", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            colName.IndexOf("Hazard", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            colName.IndexOf("Thorn", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return true;
+        }
+
+        if (col.transform.parent != null)
+        {
+            string pName = col.transform.parent.name;
+            if (pName.IndexOf("Damage", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pName.IndexOf("Spike", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pName.IndexOf("Plant", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pName.IndexOf("Hazard", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pName.IndexOf("Thorn", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+
+        // 3. Tilemap tile inspection at hit position
+        UnityEngine.Tilemaps.Tilemap tilemap = col.GetComponent<UnityEngine.Tilemaps.Tilemap>();
+        if (tilemap == null)
+        {
+            tilemap = col.GetComponentInParent<UnityEngine.Tilemaps.Tilemap>();
+        }
+
+        if (tilemap != null)
+        {
+            Vector3Int cellPos = tilemap.WorldToCell(position);
+            Vector3Int[] candidateCells = new Vector3Int[]
+            {
+                cellPos,
+                cellPos + Vector3Int.down,
+                cellPos + Vector3Int.left,
+                cellPos + Vector3Int.right
+            };
+
+            foreach (var cell in candidateCells)
+            {
+                var tile = tilemap.GetTile(cell);
+                if (tile != null)
+                {
+                    string tileName = tile.name;
+                    if (tileName.IndexOf("Spike", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        tileName.IndexOf("Plant", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        tileName.IndexOf("Damage", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        tileName.IndexOf("Thorn", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
     private void OnTriggerEnter2D(Collider2D collision)
     {
         if (isFalling && !hasLanded && collision != null)
@@ -203,8 +275,16 @@ public class ArrowPickup : MonoBehaviour
             if (!collision.isTrigger && !collision.CompareTag("Player") && collision.GetComponentInParent<Player>() == null &&
                 collision.GetComponent<Arrow>() == null && collision.GetComponent<ArrowPickup>() == null)
             {
-                LandOnGround(transform.position.y);
-                return;
+                // Only land if arrow is above the collider's top surface
+                float topY = collision.bounds.max.y;
+                if (transform.position.y >= topY - 0.25f)
+                {
+                    bool isSpike = IsSpikeOrPlantOrDamage(collision, transform.position);
+                    float offset = isSpike ? 1.25f : 1.05f;
+                    LandOnGround(topY + offset);
+                    return;
+                }
+                // If hitting the side of a wall/plant while falling, do not freeze; let gravity continue pulling down
             }
         }
 
@@ -218,8 +298,23 @@ public class ArrowPickup : MonoBehaviour
             if (!collision.gameObject.CompareTag("Player") && collision.gameObject.GetComponentInParent<Player>() == null &&
                 collision.gameObject.GetComponent<Arrow>() == null && collision.gameObject.GetComponent<ArrowPickup>() == null)
             {
-                LandOnGround(transform.position.y);
-                return;
+                // Check if hit surface is facing upward (normal.y > 0.4f)
+                if (collision.contactCount > 0 && collision.GetContact(0).normal.y > 0.4f)
+                {
+                    Vector2 contact = collision.GetContact(0).point;
+                    bool isSpike = IsSpikeOrPlantOrDamage(collision.collider, contact);
+                    float offset = isSpike ? 1.25f : 1.05f;
+                    LandOnGround(contact.y + offset);
+                    return;
+                }
+                else if (transform.position.y >= collision.collider.bounds.max.y - 0.25f)
+                {
+                    float topY = collision.collider.bounds.max.y;
+                    bool isSpike = IsSpikeOrPlantOrDamage(collision.collider, transform.position);
+                    float offset = isSpike ? 1.25f : 1.05f;
+                    LandOnGround(topY + offset);
+                    return;
+                }
             }
         }
 

@@ -6,6 +6,13 @@ public class Arrow : MonoBehaviour
     public float lifeTime = 3f;
     public int damage = 1;
 
+    [Header("Flight Distance Settings")]
+    [Tooltip("Fixed horizontal distance the arrow flies before dropping down as a collectible pickup")]
+    public float maxFlightDistance = 8f;
+
+    private Vector2 startPosition;
+    private bool hasStartPosition = false;
+
     private Rigidbody2D rb;
     private Collider2D col;
     private float direction = 1f;
@@ -27,6 +34,12 @@ public class Arrow : MonoBehaviour
         transform.rotation = direction > 0 ? Quaternion.Euler(0f, 0f, 180f) : Quaternion.identity;
         initialized = true;
 
+        if (!hasStartPosition)
+        {
+            startPosition = transform.position;
+            hasStartPosition = true;
+        }
+
         if (rb == null)
         {
             rb = GetComponent<Rigidbody2D>();
@@ -41,6 +54,12 @@ public class Arrow : MonoBehaviour
     private void Start()
     {
         spawnTime = Time.time;
+
+        if (!hasStartPosition)
+        {
+            startPosition = transform.position;
+            hasStartPosition = true;
+        }
 
         if (rb == null)
         {
@@ -122,6 +141,15 @@ public class Arrow : MonoBehaviour
 
         // Perform continuous sweep check every render frame for instant wall response
         CheckCollisionAhead(Time.deltaTime);
+        if (hasDroppedAsPickup) return;
+
+        // Check if fixed flight distance reached
+        float traveled = Mathf.Abs(transform.position.x - startPosition.x);
+        if (traveled >= maxFlightDistance)
+        {
+            DropAsCollectible();
+            return;
+        }
 
         Camera cam = Camera.main;
         if (cam != null && !hasDroppedAsPickup)
@@ -146,6 +174,15 @@ public class Arrow : MonoBehaviour
         if (hasDroppedAsPickup) return;
 
         CheckCollisionAhead(Time.fixedDeltaTime);
+        if (hasDroppedAsPickup) return;
+
+        // Check if fixed flight distance reached
+        float traveled = Mathf.Abs(transform.position.x - startPosition.x);
+        if (traveled >= maxFlightDistance)
+        {
+            DropAsCollectible();
+            return;
+        }
 
         if (rb != null && !hasDroppedAsPickup)
         {
@@ -224,7 +261,7 @@ public class Arrow : MonoBehaviour
             {
                 contact = currentPos;
             }
-            transform.position = contact - sweepDir * 0.15f;
+            transform.position = contact - sweepDir * 0.35f;
             HandleHit(bestHit.collider.gameObject);
         }
     }
