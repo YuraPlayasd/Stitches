@@ -33,10 +33,17 @@ public class Player : MonoBehaviour
 
     private SpriteRenderer spriteRender;
 
-    [Header("Shooting")] 
+    [Header("Shooting & Ammo")] 
     public GameObject arrowPrefab;
     public Transform arrowSpawnPoint;
     public float arrowCooldown = 0.5f;
+    [Tooltip("Number of arrows remaining")]
+    public int arrowsCount = 0;
+    public TMPro.TextMeshProUGUI arrowCountText;
+
+    [Header("Jump / Fall Feel")]
+    [Tooltip("Multiplier applied to gravity when falling to increase fall speed")]
+    public float fallMultiplier = 2.5f;
 
     private float nextArrowTime;
 
@@ -53,6 +60,8 @@ public class Player : MonoBehaviour
     [Header("Slope Settings")]
     [Tooltip("Maximum slope angle in degrees that the player can walk on")]
     public float maxSlopeAngle = 55f;
+    [Tooltip("Minimum slope angle in degrees before slope mechanics kick in (prevents false slope detection on flat tile seams)")]
+    public float minSlopeAngle = 5f;
     [Tooltip("Distance below player collider to check for ground and slopes")]
     public float slopeCheckDistance = 0.5f;
 
@@ -80,6 +89,10 @@ public class Player : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        }
         animator = GetComponent<Animator>();
         extraJumps = extraJumpesValue;
         spriteRender = GetComponent<SpriteRenderer>();
@@ -92,6 +105,16 @@ public class Player : MonoBehaviour
 
         AutoFindHealthImage();
         UpdateHealthUI();
+
+        string sceneName = SceneManager.GetActiveScene().name;
+        if (BodyPartsTracker.IsHubOrLevel2(sceneName))
+        {
+            BodyPartsTracker.SetHasHead(true);
+        }
+
+        EnsureArrowPrefab();
+        AutoFindArrowCountUI();
+        UpdateArrowUI();
 
         IntroCutscene.EnsureCutsceneExists();
         FrankVision.EnsureExists(gameObject);
@@ -315,6 +338,12 @@ public class Player : MonoBehaviour
     {
         CheckGrounded();
         ApplyMovement();
+
+        // Increase fall speed for snappy, responsive platformer controls
+        if (rb != null && rb.linearVelocity.y < 0f && !isGrounded)
+        {
+            rb.linearVelocity += Vector2.up * (Physics2D.gravity.y * (fallMultiplier - 1f) * Time.fixedDeltaTime);
+        }
     }
 
     private void CheckGrounded()
@@ -355,7 +384,7 @@ public class Player : MonoBehaviour
         {
             Bounds bounds = playerCollider.bounds;
             Vector2 boxOrigin = bounds.center;
-            Vector2 boxSize = new Vector2(bounds.size.x * 0.85f, 0.1f);
+            Vector2 boxSize = new Vector2(bounds.size.x * 0.8f, 0.1f);
             float castDistance = bounds.extents.y + slopeCheckDistance;
 
             RaycastHit2D[] hits = Physics2D.BoxCastAll(boxOrigin, boxSize, 0f, Vector2.down, castDistance, groundLayer);
@@ -376,37 +405,38 @@ public class Player : MonoBehaviour
 
             if (foundHit)
             {
-                // Determine accurate surface normal via downward raycast at hit point
-                RaycastHit2D[] surfaceHits = Physics2D.RaycastAll(validHit.point + Vector2.up * 0.2f, Vector2.down, 0.5f, groundLayer);
-                Vector2 normal = validHit.normal;
-                foreach (var sh in surfaceHits)
+                // To determine ground normal without catching on tile seams, cast downward from player center
+                RaycastHit2D centerHit = Physics2D.Raycast(new Vector2(bounds.center.x, bounds.min.y + 0.15f), Vector2.down, slopeCheckDistance + 0.2f, groundLayer);
+                Vector2 normal = Vector2.up;
+                if (centerHit.collider != null && centerHit.collider != playerCollider && (dropThroughTimer <= 0f || centerHit.collider != currentOneWayPlatform))
                 {
-                    if (sh.collider != null && sh.collider != playerCollider)
-                    {
-                        if (dropThroughTimer > 0f && sh.collider == currentOneWayPlatform)
-                            continue;
-                        normal = sh.normal;
-                        break;
-                    }
+                    normal = centerHit.normal;
                 }
+                else
+                {
+                    normal = validHit.normal;
+                }
+
                 float hitAngle = Vector2.Angle(normal, Vector2.up);
 
                 if (hitAngle <= maxSlopeAngle)
                 {
                     float distanceToGround = Mathf.Max(0f, validHit.distance - (bounds.extents.y - 0.05f));
-                    float allowedDistance = hitAngle > 1f ? slopeCheckDistance : 0.2f;
+                    float allowedDistance = hitAngle >= minSlopeAngle ? slopeCheckDistance : 0.2f;
 
                     if (distanceToGround <= allowedDistance)
                     {
                         grounded = true;
 
-                        if (hitAngle > 1f)
+                        // Only activate slope physics if the surface angle is significantly sloped
+                        // Surfaces below minSlopeAngle (0-5 deg) are treated as pure flat ground to prevent seam stutter
+                        if (hitAngle >= minSlopeAngle)
                         {
                             isOnSlope = true;
                             slopeNormal = normal;
                             slopeAngle = hitAngle;
 
-                            // Downward slope snapping during descent to maintain seamless ground contact
+                            // Downward slope snapping ONLY on actual slopes during descent
                             if (!isJumping && distanceToGround > 0.02f && distanceToGround <= 0.35f && rb != null && rb.linearVelocity.y <= 0.1f)
                             {
                                 rb.position += Vector2.down * (distanceToGround - 0.005f);
@@ -452,7 +482,13 @@ public class Player : MonoBehaviour
         else
         {
             // Flat ground or airborne
-            rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
+            float yVel = rb.linearVelocity.y;
+            if (isGrounded && yVel < 0f && yVel > -1.5f)
+            {
+                // Zero out micro-downward velocity on flat ground so player doesn't push into floor seams
+                yVel = 0f;
+            }
+            rb.linearVelocity = new Vector2(moveInput * moveSpeed, yVel);
         }
     }
 
@@ -523,17 +559,37 @@ public class Player : MonoBehaviour
             playerCollider = GetComponent<BoxCollider2D>();
         }
 
-        if (playerCollider != null && !isDefaultColliderCached)
+        if (playerCollider != null)
         {
-            defaultColliderSize = playerCollider.size;
-            defaultColliderOffset = playerCollider.offset;
-            isDefaultColliderCached = true;
-
-            if (fallColliderSize == Vector2.zero)
+            // Give BoxCollider2D rounded corners to prevent internal edge snagging on tile seams
+            if (playerCollider.edgeRadius < 0.05f)
             {
-                float bottomReduction = 0.55f;
-                fallColliderSize = new Vector2(defaultColliderSize.x * 0.9f, Mathf.Max(0.1f, defaultColliderSize.y - bottomReduction));
-                fallColliderOffset = new Vector2(defaultColliderOffset.x, defaultColliderOffset.y + bottomReduction * 0.5f);
+                playerCollider.edgeRadius = 0.05f;
+            }
+
+            // Ensure zero friction material is active on the collider
+            if (playerCollider.sharedMaterial == null)
+            {
+                PhysicsMaterial2D mat = Resources.Load<PhysicsMaterial2D>("MovementMaterial");
+                if (mat == null)
+                {
+                    mat = new PhysicsMaterial2D("MovementMaterial") { friction = 0f, bounciness = 0f };
+                }
+                playerCollider.sharedMaterial = mat;
+            }
+
+            if (!isDefaultColliderCached)
+            {
+                defaultColliderSize = playerCollider.size;
+                defaultColliderOffset = playerCollider.offset;
+                isDefaultColliderCached = true;
+
+                if (fallColliderSize == Vector2.zero)
+                {
+                    float bottomReduction = 0.55f;
+                    fallColliderSize = new Vector2(defaultColliderSize.x * 0.9f, Mathf.Max(0.1f, defaultColliderSize.y - bottomReduction));
+                    fallColliderOffset = new Vector2(defaultColliderOffset.x, defaultColliderOffset.y + bottomReduction * 0.5f);
+                }
             }
         }
     }
@@ -649,12 +705,93 @@ public class Player : MonoBehaviour
         isInvulnerable = false;
     }
 
+    public void AddArrows(int amount)
+    {
+        arrowsCount += amount;
+        UpdateArrowUI();
+
+        if (FrankVision.Instance != null)
+        {
+            FrankVision.Instance.OnArrowCollected();
+        }
+    }
+
+    public void EnsureArrowPrefab()
+    {
+        if (arrowPrefab == null)
+        {
+            arrowPrefab = Resources.Load<GameObject>("Arrow");
+            if (arrowPrefab == null)
+            {
+                arrowPrefab = Resources.Load<GameObject>("Prefabs/Arrow");
+            }
+        }
+    }
+
+    public void AutoFindArrowCountUI()
+    {
+        if (arrowCountText != null) return;
+
+        GameObject counterObj = GameObject.Find("ArrowCountText");
+        if (counterObj == null) counterObj = GameObject.Find("ArrowCounter");
+
+        if (counterObj != null)
+        {
+            arrowCountText = counterObj.GetComponent<TMPro.TextMeshProUGUI>();
+            if (arrowCountText == null) arrowCountText = counterObj.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+        }
+
+        if (arrowCountText == null)
+        {
+            Canvas canvas = Object.FindAnyObjectByType<Canvas>();
+            if (canvas != null)
+            {
+                GameObject newObj = new GameObject("ArrowCounter");
+                newObj.transform.SetParent(canvas.transform, false);
+
+                RectTransform rt = newObj.AddComponent<RectTransform>();
+                rt.anchorMin = new Vector2(1f, 1f);
+                rt.anchorMax = new Vector2(1f, 1f);
+                rt.pivot = new Vector2(1f, 1f);
+                rt.anchoredPosition = new Vector2(-40f, -40f);
+                rt.sizeDelta = new Vector2(320f, 90f);
+
+                TMPro.TextMeshProUGUI tmp = newObj.AddComponent<TMPro.TextMeshProUGUI>();
+                tmp.fontSize = 56f;
+                tmp.fontStyle = TMPro.FontStyles.Bold;
+                tmp.alignment = TMPro.TextAlignmentOptions.TopRight;
+                tmp.color = Color.white;
+                tmp.outlineColor = Color.black;
+                tmp.outlineWidth = 0.2f;
+
+                TMPro.TMP_FontAsset font = Resources.Load<TMPro.TMP_FontAsset>("Fonts & Materials/Electronic Highway Sign SDF");
+                if (font == null) font = Resources.Load<TMPro.TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+                if (font != null) tmp.font = font;
+
+                arrowCountText = tmp;
+            }
+        }
+    }
+
+    public void UpdateArrowUI()
+    {
+        if (arrowCountText == null)
+        {
+            AutoFindArrowCountUI();
+        }
+
+        if (arrowCountText != null)
+        {
+            arrowCountText.text = $"x {arrowsCount}";
+        }
+    }
+
     public void Die()
     {
         string currentScene = SceneManager.GetActiveScene().name;
         if (string.IsNullOrEmpty(currentScene))
         {
-            SceneManager.LoadScene("GameScene");
+            SceneManager.LoadScene("Level 1");
         }
         else
         {
@@ -664,7 +801,7 @@ public class Player : MonoBehaviour
 
     private void Shoot()
     {
-        if (arrowPrefab == null)
+        if (arrowsCount <= 0)
         {
             return;
         }
@@ -673,28 +810,67 @@ public class Player : MonoBehaviour
         {
             return;
         }
-        
-        nextArrowTime = Time.time + arrowCooldown;
-        
-        Vector3 spawnPos = arrowSpawnPoint != null ? arrowSpawnPoint.position : transform.position;
-        GameObject arrow = Instantiate(arrowPrefab, spawnPos, Quaternion.identity);
 
-        float shootDir = transform.localScale.x > 0 ? 1f : -1f;
-
-        if (transform.localScale.x > 0)
+        EnsureArrowPrefab();
+        if (arrowPrefab == null)
         {
-            arrow.transform.rotation = Quaternion.Euler(0, 0, 180);
+            return;
+        }
+
+        nextArrowTime = Time.time + arrowCooldown;
+        arrowsCount--;
+        UpdateArrowUI();
+
+        float shootDir = transform.localScale.x >= 0 ? 1f : -1f;
+        Vector2 rayOrigin = (Vector2)transform.position + new Vector2(0f, 0.2f);
+        Vector2 shootVec = new Vector2(shootDir, 0f);
+        float spawnDist = 0.65f;
+
+        // Ensure we never spawn an arrow inside or past a solid wall if the player is hugging a wall
+        RaycastHit2D[] wallHits = Physics2D.RaycastAll(rayOrigin, shootVec, 0.85f);
+        foreach (var wh in wallHits)
+        {
+            if (wh.collider == null || wh.collider.gameObject == gameObject) continue;
+            if (wh.collider.transform.IsChildOf(transform)) continue;
+            if (wh.collider.isTrigger) continue;
+            spawnDist = Mathf.Min(spawnDist, Mathf.Max(0.15f, wh.distance - 0.2f));
+        }
+
+        Vector3 spawnPos = arrowSpawnPoint != null
+            ? arrowSpawnPoint.position
+            : transform.position + new Vector3(shootDir * spawnDist, 0.2f, 0f);
+
+        // Arrow sprite tip is on the left:
+        // shootDir > 0 (flying right) -> rotate 180 deg to point right
+        // shootDir < 0 (flying left) -> rotate 0 deg (identity) to point left
+        Quaternion rot = shootDir > 0 ? Quaternion.Euler(0f, 0f, 180f) : Quaternion.identity;
+        GameObject arrow = Instantiate(arrowPrefab, spawnPos, rot);
+
+        // Ignore collisions between all player colliders and the arrow collider
+        Collider2D arrowCol = arrow.GetComponent<Collider2D>();
+        if (arrowCol != null)
+        {
+            foreach (var pCol in GetComponentsInChildren<Collider2D>())
+            {
+                if (pCol != null)
+                {
+                    Physics2D.IgnoreCollision(arrowCol, pCol, true);
+                }
+            }
+        }
+
+        Arrow arrowComp = arrow.GetComponent<Arrow>();
+        if (arrowComp != null)
+        {
+            arrowComp.Init(shootDir);
         }
         else
         {
-            arrow.transform.rotation = Quaternion.identity;
-        }
-
-        Rigidbody2D arrowRb = arrow.GetComponent<Rigidbody2D>();
-        if (arrowRb != null)
-        {
-            float arrowSpeed = 10f;
-            arrowRb.linearVelocity = new Vector2(shootDir * arrowSpeed, 0f);
+            Rigidbody2D arrowRb = arrow.GetComponent<Rigidbody2D>();
+            if (arrowRb != null)
+            {
+                arrowRb.linearVelocity = new Vector2(shootDir * 12f, 0f);
+            }
         }
     }
 }

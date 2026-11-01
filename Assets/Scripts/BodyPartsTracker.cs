@@ -4,6 +4,7 @@ using UnityEngine;
 /// <summary>
 /// Hidden tracking system for collected Frank body parts.
 /// Keeps count of the Head, Torso, Arms, and Legs.
+/// Automatically assumes head is collected in Level 2 / LevelHub for easy testing.
 /// </summary>
 public static class BodyPartsTracker
 {
@@ -20,6 +21,31 @@ public static class BodyPartsTracker
     public static bool AllPartsCollected => TotalPartsCollected >= TotalRequiredParts;
 
     public static event Action<CollectibleType, int> OnPartCollected;
+
+    public static void SetHasHead(bool value)
+    {
+        HasHead = value;
+    }
+
+    public static bool IsHubOrLevel2(string sceneName)
+    {
+        if (string.IsNullOrEmpty(sceneName)) return false;
+        return sceneName.IndexOf("LevelHub", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               sceneName.IndexOf("Level_Hub", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               sceneName.IndexOf("Level 2", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               sceneName.IndexOf("Level2", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void AutoCheckLevelHead()
+    {
+        string current = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        if (IsHubOrLevel2(current))
+        {
+            HasHead = true;
+            Debug.Log("[BodyPartsTracker] Auto-enabled HasHead for Level 2 / LevelHub testing.");
+        }
+    }
 
     public static void RegisterPart(CollectibleType type)
     {
@@ -50,7 +76,7 @@ public static class BodyPartsTracker
         }
     }
 
-    public static void ResetTracker()
+    public static void ResetProgress()
     {
         HasHead = false;
         HasTorso = false;

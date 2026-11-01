@@ -4,8 +4,8 @@ using UnityEngine.SceneManagement;
 public class Door : MonoBehaviour
 {
     [Header("Scene Transition Settings")]
-    [Tooltip("Name of the scene to load upon entering the door (e.g. Level2 or LevelHub)")]
-    public string nextSceneName = "Level2";
+    [Tooltip("Name of the scene to load upon entering the door (e.g. Level 2 or LevelHub)")]
+    public string nextSceneName = "Level 2";
 
     [Tooltip("If enabled, loads scene by build index instead of name")]
     public bool loadByIndex = false;
@@ -90,7 +90,15 @@ public class Door : MonoBehaviour
         }
         else if (!string.IsNullOrEmpty(nextSceneName))
         {
-            SceneManager.LoadScene(nextSceneName);
+            string target = nextSceneName;
+            if (target == "LevelHub" || target == "Level2")
+            {
+                if (Application.CanStreamedLevelBeLoaded("Level 2"))
+                {
+                    target = "Level 2";
+                }
+            }
+            SceneManager.LoadScene(target);
         }
         else
         {

@@ -80,6 +80,20 @@ public class Enemy : MonoBehaviour
         enemyCollider = GetComponent<Collider2D>();
         rb = GetComponent<Rigidbody2D>();
 
+        // Spirit can float through obstacles and is immune to gravity traps
+        if (enemyType == EnemyType.Spirit)
+        {
+            if (rb != null)
+            {
+                rb.gravityScale = 0f;
+                rb.bodyType = RigidbodyType2D.Kinematic;
+            }
+            if (enemyCollider != null)
+            {
+                enemyCollider.isTrigger = true;
+            }
+        }
+
         if (targetPlayer == null)
         {
             GameObject p = GameObject.FindWithTag("Player");
@@ -97,14 +111,20 @@ public class Enemy : MonoBehaviour
         if (enemyType == EnemyType.Zombie)
         {
             maxHealth = 1;
+            patrolSpeed = 0.9f;
+            chaseSpeed = 1.6f;
         }
         else if (enemyType == EnemyType.Skeleton)
         {
             maxHealth = 2;
+            patrolSpeed = 2.0f;
+            chaseSpeed = 3.2f;
         }
         else if (enemyType == EnemyType.Spirit)
         {
             maxHealth = 3;
+            patrolSpeed = 2.5f;
+            chaseSpeed = 4.0f;
         }
 
         if (health <= 0 || health > maxHealth)
@@ -218,6 +238,42 @@ public class Enemy : MonoBehaviour
         if (spriteRenderer != null)
         {
             spriteRenderer.flipX = (transform.position.x - targetX) < 0;
+        }
+    }
+
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        CheckHazard(collision.gameObject);
+    }
+
+    private void OnCollisionStay2D(Collision2D collision)
+    {
+        CheckHazard(collision.gameObject);
+    }
+
+    private void OnTriggerEnter2D(Collider2D collider)
+    {
+        CheckHazard(collider.gameObject);
+    }
+
+    private void OnTriggerStay2D(Collider2D collider)
+    {
+        CheckHazard(collider.gameObject);
+    }
+
+    private void CheckHazard(GameObject hitObj)
+    {
+        if (isDead || enemyType == EnemyType.Spirit || hitObj == null) return;
+        if (hitObj.CompareTag("Player") || hitObj.GetComponent<Enemy>() != null || hitObj.GetComponent<Arrow>() != null) return;
+
+        bool isHazard = hitObj.CompareTag("Damage") ||
+                        (hitObj.transform.parent != null && hitObj.transform.parent.CompareTag("Damage")) ||
+                        hitObj.name.IndexOf("Damage", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        hitObj.name.IndexOf("Spike", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+        if (isHazard)
+        {
+            Die();
         }
     }
 

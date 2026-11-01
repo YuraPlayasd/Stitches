@@ -93,6 +93,10 @@ public class IntroCutscene : MonoBehaviour
     public AudioClip screamSound;
     public AudioClip voiceBlipSound;
 
+    [Header("Speech Audio (Yaping)")]
+    public AudioClip yapingAudioClip;
+    private AudioSource yapingAudioSource;
+
     [Header("Skip Cutscene Settings")]
     public Button skipButton;
     public KeyCode skipKey = KeyCode.Escape;
@@ -133,6 +137,63 @@ public class IntroCutscene : MonoBehaviour
         }
     }
 
+    void OnDisable()
+    {
+        StopYapingAudio();
+    }
+
+    void OnDestroy()
+    {
+        StopYapingAudio();
+    }
+
+    public void EnsureYapingAudio()
+    {
+        if (yapingAudioSource == null)
+        {
+            yapingAudioSource = gameObject.AddComponent<AudioSource>();
+            yapingAudioSource.playOnAwake = false;
+            yapingAudioSource.spatialBlend = 0f;
+            yapingAudioSource.loop = true;
+        }
+
+        if (yapingAudioClip == null)
+        {
+            yapingAudioClip = Resources.Load<AudioClip>("Audio/yaping");
+            if (yapingAudioClip == null)
+            {
+                yapingAudioClip = Resources.Load<AudioClip>("yaping");
+            }
+        }
+
+        if (yapingAudioSource != null && yapingAudioClip != null)
+        {
+            yapingAudioSource.clip = yapingAudioClip;
+        }
+    }
+
+    public void PlayYapingAudio()
+    {
+        EnsureYapingAudio();
+        if (yapingAudioSource != null && yapingAudioClip != null)
+        {
+            yapingAudioSource.clip = yapingAudioClip;
+            yapingAudioSource.loop = true;
+            if (!yapingAudioSource.isPlaying)
+            {
+                yapingAudioSource.Play();
+            }
+        }
+    }
+
+    public void StopYapingAudio()
+    {
+        if (yapingAudioSource != null && yapingAudioSource.isPlaying)
+        {
+            yapingAudioSource.Stop();
+        }
+    }
+
     /// <summary>
     /// Safe static bootstrap called from Player.Start() or scene loaders
     /// to guarantee the cutscene plays even with Domain Reload disabled.
@@ -140,7 +201,7 @@ public class IntroCutscene : MonoBehaviour
     public static void EnsureCutsceneExists()
     {
         var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-        if (activeScene.name != "GameScene" && !string.IsNullOrEmpty(activeScene.name))
+        if (activeScene.name != "GameScene" && activeScene.name != "Level 1" && !string.IsNullOrEmpty(activeScene.name))
         {
             return;
         }
@@ -796,6 +857,7 @@ public class IntroCutscene : MonoBehaviour
         }
 
         // Stop cutscene audio
+        StopYapingAudio();
         if (audioSource != null && audioSource.isPlaying)
         {
             audioSource.Stop();
@@ -968,6 +1030,8 @@ public class IntroCutscene : MonoBehaviour
         skipTyping = false;
         dialogueText.text = "";
 
+        PlayYapingAudio();
+
         int charCount = 0;
 
         for (int i = 0; i < fullText.Length; i++)
@@ -1001,6 +1065,8 @@ public class IntroCutscene : MonoBehaviour
 
             yield return new WaitForSeconds(typingSpeed);
         }
+
+        StopYapingAudio();
 
         // Return mouth to closed idle sprite
         if (headRenderer != null && headNormalSprite != null)

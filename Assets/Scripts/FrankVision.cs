@@ -40,10 +40,29 @@ public class FrankVision : MonoBehaviour
     public float defaultSpeechDuration = 4.0f;
     public float typingSpeed = 0.035f;
 
-    [Header("Spike Warning Settings")]
-    [Tooltip("Distance from spikes/Damage tilemap to trigger Frank's warning (constrained to camera reach)")]
-    public float spikeWarningDistance = 4.5f;
+    [Header("Speech Audio (Yaping)")]
+    public AudioClip yapingAudioClip;
+    private AudioSource yapingAudioSource;
 
+    [Header("Spike Warning Settings")]
+    [Tooltip("Distance from spikes/Damage tilemap to trigger Frank's warning (close proximity, e.g. 2.8)")]
+    public float spikeWarningDistance = 2.8f;
+
+    [Header("Level 2 Arrow Tutorial")]
+    [Tooltip("Distance walked to the right from start in Level 2 before warning if player has 0 arrows")]
+    public float level2WalkDistanceForWarning = 4.0f;
+    [TextArea(2, 4)]
+    public string noArrowsWarningText = "Doctor, wait! It looks dangerous ahead! We should check to the left for a way to defend ourselves!";
+    [TextArea(2, 4)]
+    public string firstArrowPickupText = "Aha! You can throw these arrows by pressing [F]! I'll count how many we have in the top right corner!";
+
+    private static bool hasWarnedNoArrowsInLevel2 = false;
+    private static bool hasExplainedArrows = false;
+    private float level2PlayerStartX = float.NaN;
+    private bool isLevel2Scene = false;
+    private bool hasSpawnedLevel2Arrows = false;
+
+    private static bool hasWarnedAboutSpikes = false;
     private readonly HashSet<string> seenObjects = new HashSet<string>();
     private readonly HashSet<string> announcedScenes = new HashSet<string>();
 
@@ -73,12 +92,20 @@ public class FrankVision : MonoBehaviour
         scanCoroutine = StartCoroutine(VisionScanRoutine());
         SceneManager.sceneLoaded += OnSceneLoaded;
 
+        string activeScene = SceneManager.GetActiveScene().name;
         // Check if starting directly in a new scene with Frank's head already collected
-        CheckLocationAnnouncement(SceneManager.GetActiveScene().name);
+        CheckLocationAnnouncement(activeScene);
+        InitLevel2Tutorial(activeScene);
+    }
+
+    void OnDisable()
+    {
+        StopYapingAudio();
     }
 
     void OnDestroy()
     {
+        StopYapingAudio();
         SceneManager.sceneLoaded -= OnSceneLoaded;
         if (Instance == this) Instance = null;
     }
@@ -87,6 +114,7 @@ public class FrankVision : MonoBehaviour
     {
         FindOrBuildDialogueUI();
         CheckLocationAnnouncement(scene.name);
+        InitLevel2Tutorial(scene.name);
     }
 
     /// <summary>
@@ -144,6 +172,9 @@ public class FrankVision : MonoBehaviour
 
             // Scan for spikes and hazards
             ScanForDamageAndSpikes();
+
+            // Check Level 2 arrow tutorial warning
+            CheckLevel2NoArrowsWarning();
         }
     }
 
@@ -208,55 +239,67 @@ public class FrankVision : MonoBehaviour
     private void ScanForDamageAndSpikes()
     {
         if (!BodyPartsTracker.HasHead) return;
+        if (hasWarnedAboutSpikes) return;
 
-        if (seenObjects.Contains("Spikes_First_Seen"))
-        {
-            return;
-        }
-
-        // 1. Check colliders tagged "Damage" or named "Spikes"
+        // 1. Check direct nearby colliders tagged or named Damage / Spike
         Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, spikeWarningDistance);
         foreach (var col in hits)
         {
             if (col == null) continue;
 
-            bool isSpike = col.CompareTag("Damage") ||
-                           col.gameObject.name.IndexOf("Damage", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                           col.gameObject.name.IndexOf("Spike", System.StringComparison.OrdinalIgnoreCase) >= 0;
-
-            // Exclude enemies from spike warning (they have their own behaviour)
-            if (col.GetComponent<Enemy>() != null || (col.transform.parent != null && col.transform.parent.GetComponent<Enemy>() != null))
+            // Exclude player, enemies, arrows
+            if (col.CompareTag("Player") || col.GetComponent<Enemy>() != null || (col.transform.parent != null && col.transform.parent.GetComponent<Enemy>() != null) || col.GetComponent<Arrow>() != null)
             {
                 continue;
             }
 
+            bool isSpike = col.CompareTag("Damage") ||
+                           (col.transform.parent != null && col.transform.parent.CompareTag("Damage")) ||
+                           col.gameObject.name.IndexOf("Damage", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                           col.gameObject.name.IndexOf("Spike", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
             if (isSpike)
             {
-                Vector2 closest = col.ClosestPoint(transform.position);
-                if (!IsInCameraView(closest)) continue;
-
-                seenObjects.Add("Spikes_First_Seen");
-                Speak("Doctor, watch out! Sharp spikes ahead! Don't step on them, they will hurt us!", FrankDialoguePriority.Warning, 4.0f);
+                TriggerSpikeWarning();
                 return;
             }
         }
 
-        // 2. Direct search for Damage Tilemap object within distance
+        // 2. Direct Tilemap check for Damage tilemap tiles near the player
         GameObject damageObj = GameObject.Find("Damage");
         if (damageObj != null)
         {
-            Collider2D dmgCol = damageObj.GetComponent<Collider2D>();
-            if (dmgCol != null)
+            UnityEngine.Tilemaps.Tilemap tm = damageObj.GetComponent<UnityEngine.Tilemaps.Tilemap>();
+            if (tm != null)
             {
-                Vector2 closest = dmgCol.ClosestPoint(transform.position);
-                float dist = Vector2.Distance(transform.position, closest);
-                if (dist <= spikeWarningDistance && IsInCameraView(closest))
+                Vector3Int centerCell = tm.WorldToCell(transform.position);
+                int checkRadius = Mathf.CeilToInt(spikeWarningDistance);
+                for (int x = -checkRadius; x <= checkRadius; x++)
                 {
-                    seenObjects.Add("Spikes_First_Seen");
-                    Speak("Doctor, watch out! Sharp spikes ahead! Don't step on them, they will hurt us!", FrankDialoguePriority.Warning, 4.0f);
+                    for (int y = -checkRadius; y <= checkRadius; y++)
+                    {
+                        Vector3Int cell = new Vector3Int(centerCell.x + x, centerCell.y + y, 0);
+                        if (tm.HasTile(cell))
+                        {
+                            Vector3 tilePos = tm.GetCellCenterWorld(cell);
+                            float dist = Vector2.Distance(transform.position, tilePos);
+                            if (dist <= spikeWarningDistance)
+                            {
+                                TriggerSpikeWarning();
+                                return;
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private void TriggerSpikeWarning()
+    {
+        hasWarnedAboutSpikes = true;
+        seenObjects.Add("Spikes_First_Seen");
+        Speak("Doctor, watch out! Sharp spikes ahead! Don't step on them, they will hurt us!", FrankDialoguePriority.Warning, 4.0f);
     }
 
     /// <summary>
@@ -311,7 +354,7 @@ public class FrankVision : MonoBehaviour
     private string GetLocationPhrase(string sceneName)
     {
         string lower = sceneName.ToLowerInvariant();
-        if (lower.Contains("hub") || lower.Contains("castle") || lower.Contains("level2"))
+        if (lower.Contains("hub") || lower.Contains("castle") || lower.Contains("level2") || lower.Contains("level 2"))
         {
             return "This is the castle hub! It is cold and dangerous here, but I can clearly sense one of my parts nearby!";
         }
@@ -350,10 +393,62 @@ public class FrankVision : MonoBehaviour
         if (speechCoroutine != null)
         {
             StopCoroutine(speechCoroutine);
+            StopYapingAudio();
         }
 
         currentPriority = priority;
         speechCoroutine = StartCoroutine(ShowSpeechRoutine(message, duration > 0 ? duration : defaultSpeechDuration));
+    }
+
+    private void EnsureYapingAudio()
+    {
+        if (yapingAudioSource == null)
+        {
+            yapingAudioSource = GetComponent<AudioSource>();
+            if (yapingAudioSource == null)
+            {
+                yapingAudioSource = gameObject.AddComponent<AudioSource>();
+            }
+            yapingAudioSource.playOnAwake = false;
+            yapingAudioSource.spatialBlend = 0f; // 2D UI sound
+            yapingAudioSource.loop = true;
+        }
+
+        if (yapingAudioClip == null)
+        {
+            yapingAudioClip = Resources.Load<AudioClip>("Audio/yaping");
+            if (yapingAudioClip == null)
+            {
+                yapingAudioClip = Resources.Load<AudioClip>("yaping");
+            }
+        }
+
+        if (yapingAudioSource != null && yapingAudioClip != null)
+        {
+            yapingAudioSource.clip = yapingAudioClip;
+        }
+    }
+
+    private void PlayYapingAudio()
+    {
+        EnsureYapingAudio();
+        if (yapingAudioSource != null && yapingAudioClip != null)
+        {
+            yapingAudioSource.clip = yapingAudioClip;
+            yapingAudioSource.loop = true;
+            if (!yapingAudioSource.isPlaying)
+            {
+                yapingAudioSource.Play();
+            }
+        }
+    }
+
+    private void StopYapingAudio()
+    {
+        if (yapingAudioSource != null && yapingAudioSource.isPlaying)
+        {
+            yapingAudioSource.Stop();
+        }
     }
 
     private IEnumerator ShowSpeechRoutine(string message, float duration)
@@ -373,11 +468,28 @@ public class FrankVision : MonoBehaviour
         if (dialogueText != null)
         {
             dialogueText.text = "";
+            PlayYapingAudio();
+
+            bool skipTyping = false;
             for (int i = 0; i < message.Length; i++)
             {
+                if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.E) || Input.GetMouseButtonDown(0))
+                {
+                    skipTyping = true;
+                }
+
+                if (skipTyping)
+                {
+                    dialogueText.text = message;
+                    break;
+                }
+
                 dialogueText.text += message[i];
                 yield return new WaitForSeconds(typingSpeed);
             }
+
+            // Immediately stop yaping as soon as typewriter text generation finishes
+            StopYapingAudio();
         }
 
         float timer = 0f;
@@ -391,6 +503,8 @@ public class FrankVision : MonoBehaviour
             }
             yield return null;
         }
+
+        StopYapingAudio();
 
         if (dialoguePanel != null)
         {
@@ -510,6 +624,85 @@ public class FrankVision : MonoBehaviour
         speakerNameText = nameTmp;
         dialogueText = textTmp;
         dialoguePanel.SetActive(false);
+    }
+
+    private void InitLevel2Tutorial(string sceneName)
+    {
+        isLevel2Scene = BodyPartsTracker.IsHubOrLevel2(sceneName);
+        if (isLevel2Scene)
+        {
+            level2PlayerStartX = transform.position.x;
+            SpawnLevel2TutorialArrows();
+        }
+    }
+
+    private void SpawnLevel2TutorialArrows()
+    {
+        if (hasSpawnedLevel2Arrows) return;
+
+        // Check if arrows already exist in the scene (placed manually by user in Scene view)
+        ArrowPickup[] existingPickups = Object.FindObjectsByType<ArrowPickup>(FindObjectsSortMode.None);
+        if (existingPickups != null && existingPickups.Length >= 3)
+        {
+            hasSpawnedLevel2Arrows = true;
+            return;
+        }
+
+        GameObject existingTutorial = GameObject.Find("Level2_TutorialArrows");
+        if (existingTutorial != null)
+        {
+            hasSpawnedLevel2Arrows = true;
+            return;
+        }
+
+        hasSpawnedLevel2Arrows = true;
+        GameObject parentObj = new GameObject("Level2_TutorialArrows");
+
+        // Target coordinates specified by user: Vector3(25.7900009, 1.97000003, 0)
+        Vector3 basePos = new Vector3(25.79f, 1.97f, 0f);
+        Vector3[] spawnPositions = new Vector3[]
+        {
+            basePos + new Vector3(-0.8f, 0f, 0f),
+            basePos,
+            basePos + new Vector3(0.8f, 0f, 0f)
+        };
+
+        foreach (var pos in spawnPositions)
+        {
+            ArrowPickup.SpawnSingleArrowPickup(pos, parentObj.transform, isFalling: false);
+        }
+    }
+
+    private void CheckLevel2NoArrowsWarning()
+    {
+        if (!isLevel2Scene || hasWarnedNoArrowsInLevel2) return;
+        if (!BodyPartsTracker.HasHead) return;
+
+        Player player = GetComponent<Player>();
+        if (player == null) player = Object.FindAnyObjectByType<Player>();
+        if (player == null) return;
+
+        if (player.arrowsCount == 0 && !float.IsNaN(level2PlayerStartX))
+        {
+            if (player.transform.position.x > level2PlayerStartX + level2WalkDistanceForWarning)
+            {
+                hasWarnedNoArrowsInLevel2 = true;
+                Speak(noArrowsWarningText, FrankDialoguePriority.Story, 5.0f);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Called when player picks up any arrow pickup in any level.
+    /// Frank's head explains how to shoot [F] and that ammo will be tracked in the top right corner.
+    /// </summary>
+    public void OnArrowCollected()
+    {
+        if (!hasExplainedArrows)
+        {
+            hasExplainedArrows = true;
+            Speak(firstArrowPickupText, FrankDialoguePriority.Story, 5.5f);
+        }
     }
 
     private void OnDrawGizmosSelected()
