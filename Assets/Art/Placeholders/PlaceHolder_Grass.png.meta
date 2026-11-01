@@ -155,8 +155,7 @@ TextureImporter:
       outline: []
       physicsShape:
       - - {x: 128, y: 70}
-        - {x: -109, y: 69}
-        - {x: -128, y: 69}
+        - {x: -128, y: 70}
         - {x: -128, y: -88}
         - {x: 128, y: -88}
       tessellationDetail: 0

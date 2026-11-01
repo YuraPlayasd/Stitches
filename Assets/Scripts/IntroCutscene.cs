@@ -274,6 +274,10 @@ public class IntroCutscene : MonoBehaviour
         // 6. Cameras
         if (cinemachineCamera == null) cinemachineCamera = Object.FindAnyObjectByType<CinemachineCamera>();
         if (fallbackCamera == null) fallbackCamera = Camera.main;
+        if (fallbackCamera != null && fallbackCamera.transform.localScale != Vector3.one)
+        {
+            fallbackCamera.transform.localScale = Vector3.one;
+        }
 
         // 7. Canvas & Dialogue UI
         Canvas canvas = Object.FindAnyObjectByType<Canvas>();
@@ -447,7 +451,7 @@ public class IntroCutscene : MonoBehaviour
                 cb.pressedColor = new Color(0.2f, 0.6f, 0.9f, 1f);
                 btn.colors = cb;
 
-                TextMeshProUGUI skipTxt = CreateTMP(skipObj.transform, "SkipText", "Пропустити ▸▸ [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
+                TextMeshProUGUI skipTxt = CreateTMP(skipObj.transform, "SkipText", "Пропустити >> [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
                 RectTransform txtRt = skipTxt.transform as RectTransform;
                 if (txtRt != null)
                 {

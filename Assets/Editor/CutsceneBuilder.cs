@@ -171,7 +171,11 @@ public static class CutsceneBuilder
         lightningStrike.thunderSound = thunderClip;
 
         Camera mainCam = Camera.main;
-        if (mainCam != null) lightningStrike.targetCamera = mainCam;
+        if (mainCam != null)
+        {
+            mainCam.transform.localScale = Vector3.one;
+            lightningStrike.targetCamera = mainCam;
+        }
         cutscene.lightningStrike = lightningStrike;
 
         GameObject skyPoint = GameObject.Find("LightningSkyPoint");
@@ -194,7 +198,7 @@ public static class CutsceneBuilder
         }
 
         // 8. Cinemachine Camera Zoom
-        CinemachineCamera[] cinemachines = Object.FindObjectsByType<CinemachineCamera>(FindObjectsSortMode.None);
+        CinemachineCamera[] cinemachines = Object.FindObjectsByType<CinemachineCamera>();
         if (cinemachines.Length > 0)
         {
             cutscene.cinemachineCamera = cinemachines[0];
@@ -390,7 +394,7 @@ public static class CutsceneBuilder
         Button sBtn = skipObj.GetComponent<Button>();
         if (sBtn == null) sBtn = skipObj.AddComponent<Button>();
 
-        TextMeshProUGUI skipTxt = CreateOrGetTMP(skipObj.transform, "SkipText", "Пропустити ▸▸ [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
+        TextMeshProUGUI skipTxt = CreateOrGetTMP(skipObj.transform, "SkipText", "Пропустити >> [Esc]", 22, FontStyles.Bold, new Color(0.9f, 0.95f, 1f));
         RectTransform txtRt = skipTxt.transform as RectTransform;
         if (txtRt != null)
         {

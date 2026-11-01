@@ -40,8 +40,23 @@ public class Player : MonoBehaviour
 
     private float nextArrowTime;
 
+    [Header("Hitbox / Collider Settings")]
+    [Tooltip("BoxCollider2D гравця (якщо не вказано, знайдеться автоматично)")]
+    public BoxCollider2D playerCollider;
+    [Tooltip("Чи змінювати розмір колайдера під час анімації падіння")]
+    public bool adjustHitboxOnFall = true;
+    [Tooltip("Розмір колайдера під час падіння (менший знизу відповідно до модельки під час падіння)")]
+    public Vector2 fallColliderSize = new Vector2(1.8f, 4.14f);
+    [Tooltip("Зсув колайдера під час падіння (піднятий знизу)")]
+    public Vector2 fallColliderOffset = new Vector2(0f, 0.275f);
+
+    private Vector2 defaultColliderSize;
+    private Vector2 defaultColliderOffset;
+    private bool isDefaultColliderCached = false;
+
     void Awake()
     {
+        CacheDefaultCollider();
         AutoFindHealthImage();
     }
 
@@ -55,6 +70,8 @@ public class Player : MonoBehaviour
         {
             spriteRender = GetComponentInChildren<SpriteRenderer>();
         }
+
+        CacheDefaultCollider();
 
         AutoFindHealthImage();
         UpdateHealthUI();
@@ -124,7 +141,7 @@ public class Player : MonoBehaviour
         // Search including inactive (e.g. while cutscene disables gameplayUI)
         if (healthImage == null)
         {
-            Image[] allImages = Object.FindObjectsByType<Image>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            Image[] allImages = Object.FindObjectsByType<Image>(FindObjectsInactive.Include);
             foreach (var img in allImages)
             {
                 if (img.gameObject.name.Equals("Health", System.StringComparison.OrdinalIgnoreCase))
@@ -255,10 +272,89 @@ public class Player : MonoBehaviour
 
     private void ChangeAnimation(string newAnimation)
     {
-        if (currentAnimation == newAnimation) return;
+        if (currentAnimation == newAnimation)
+        {
+            // Якщо зараз триває падіння і налаштування змінюються під час гри, оновлюємо хітбокс
+            if (currentAnimation == "Player_fall" && adjustHitboxOnFall && playerCollider != null)
+            {
+                if (playerCollider.size != fallColliderSize || playerCollider.offset != fallColliderOffset)
+                {
+                    playerCollider.size = fallColliderSize;
+                    playerCollider.offset = fallColliderOffset;
+                }
+            }
+            return;
+        }
 
         animator.Play(newAnimation);
         currentAnimation = newAnimation;
+        UpdateColliderForAnimation(newAnimation);
+    }
+
+    public void CacheDefaultCollider()
+    {
+        if (playerCollider == null)
+        {
+            playerCollider = GetComponent<BoxCollider2D>();
+        }
+
+        if (playerCollider != null && !isDefaultColliderCached)
+        {
+            defaultColliderSize = playerCollider.size;
+            defaultColliderOffset = playerCollider.offset;
+            isDefaultColliderCached = true;
+
+            if (fallColliderSize == Vector2.zero)
+            {
+                float bottomReduction = 0.55f;
+                fallColliderSize = new Vector2(defaultColliderSize.x * 0.9f, Mathf.Max(0.1f, defaultColliderSize.y - bottomReduction));
+                fallColliderOffset = new Vector2(defaultColliderOffset.x, defaultColliderOffset.y + bottomReduction * 0.5f);
+            }
+        }
+    }
+
+    private void UpdateColliderForAnimation(string animName)
+    {
+        if (playerCollider == null)
+        {
+            playerCollider = GetComponent<BoxCollider2D>();
+            if (playerCollider == null) return;
+        }
+
+        if (!isDefaultColliderCached)
+        {
+            CacheDefaultCollider();
+        }
+
+        if (adjustHitboxOnFall && animName == "Player_fall")
+        {
+            playerCollider.size = fallColliderSize;
+            playerCollider.offset = fallColliderOffset;
+        }
+        else
+        {
+            playerCollider.size = defaultColliderSize;
+            playerCollider.offset = defaultColliderOffset;
+        }
+    }
+
+    private void OnValidate()
+    {
+        if (playerCollider == null)
+        {
+            playerCollider = GetComponent<BoxCollider2D>();
+        }
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        if (!adjustHitboxOnFall) return;
+
+        // Показуємо контур хітбокса падіння блакитним кольором при виборі гравця в редакторі
+        Gizmos.color = new Color(0f, 0.8f, 1f, 0.75f);
+        float flipSign = transform.localScale.x >= 0 ? 1f : -1f;
+        Vector3 center = transform.position + new Vector3(fallColliderOffset.x * flipSign, fallColliderOffset.y, 0f);
+        Gizmos.DrawWireCube(center, new Vector3(fallColliderSize.x, fallColliderSize.y, 0.1f));
     }
     
     private void OnCollisionEnter2D(Collision2D collision)

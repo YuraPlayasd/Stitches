@@ -65,6 +65,56 @@ public static class AlignTilemaps
         }
     }
 
+    [MenuItem("Tools/Rebuild Tilemap Colliders (Active Scene)", false, 27)]
+    public static void RebuildTilemapCollidersActiveScene()
+    {
+        var activeScene = EditorSceneManager.GetActiveScene();
+        if (!activeScene.isLoaded) return;
+
+        bool changed = RebuildCollidersInScene(activeScene);
+        if (changed)
+        {
+            EditorSceneManager.MarkSceneDirty(activeScene);
+            Debug.Log($"<color=green>[TilemapColliders]</color> Successfully regenerated colliders in '{activeScene.name}'.");
+        }
+        else
+        {
+            Debug.Log($"<color=cyan>[TilemapColliders]</color> No Tilemaps found in '{activeScene.name}'.");
+        }
+    }
+
+    public static bool RebuildCollidersInScene(UnityEngine.SceneManagement.Scene scene)
+    {
+        if (!scene.isLoaded) return false;
+
+        Tilemap[] tilemaps = Object.FindObjectsByType<Tilemap>(FindObjectsInactive.Include);
+        bool any = false;
+
+        foreach (var tm in tilemaps)
+        {
+            if (tm.gameObject.scene != scene) continue;
+
+            any = true;
+            tm.RefreshAllTiles();
+
+            var tc = tm.GetComponent<TilemapCollider2D>();
+            if (tc != null)
+            {
+                tc.ProcessTilemapChanges();
+                tc.enabled = false;
+                tc.enabled = true;
+            }
+
+            var cc = tm.GetComponent<CompositeCollider2D>();
+            if (cc != null)
+            {
+                cc.GenerateGeometry();
+            }
+        }
+
+        return any;
+    }
+
     public static bool FixTilemapsInScene(UnityEngine.SceneManagement.Scene scene)
     {
         if (!scene.isLoaded) return false;
